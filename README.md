@@ -9,6 +9,7 @@ Choose a skill for the task you want to complete. Follow its link to read the fu
 | Skill | Purpose |
 | --- | --- |
 | [procedural-skill-creator](skills/procedural-skill-creator/SKILL.md) | Create or revise skills by defining their scope, designing their workflow, writing instructions, removing repetition, and checking the complete procedure. |
+| [technical-writing-rules](skills/technical-writing-rules/SKILL.md) | Write, revise, or review English technical documentation and engineering texts with concrete rules for accuracy, structure, language, and formatting. |
 
 ## Install
 
