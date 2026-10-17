@@ -6,10 +6,10 @@ A library of skills for AI agents. Each skill provides a procedure with connecte
 
 Choose a skill for the task you want to complete. Follow its link to read the full procedure.
 
-| Skill | Purpose |
+| Skill | Use it to |
 | --- | --- |
-| [procedural-skill-creator](skills/procedural-skill-creator/SKILL.md) | Create or revise skills by defining their scope, designing their workflow, writing instructions, removing repetition, and checking the complete procedure. |
-| [technical-writing-rules](skills/technical-writing-rules/SKILL.md) | Write, revise, or review English technical documentation and engineering texts with concrete rules for accuracy, structure, language, and formatting. |
+| [procedural-skill-creator](skills/procedural-skill-creator/SKILL.md) | Create or revise a skill with connected actions, decision criteria, and verifiable results. |
+| [technical-writing-rules](skills/technical-writing-rules/SKILL.md) | Write, revise, or review English technical text while preserving facts and meaning. |
 
 ## Install
 
