@@ -1,0 +1,14 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Skills and writing",
+      "description": "Create reusable agent procedures and write or review technical documentation.",
+      "skills": [
+        "procedural-skill-creator",
+        "technical-writing-rules"
+      ]
+    }
+  ]
+}
