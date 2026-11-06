@@ -13,7 +13,7 @@ Produce technical text that lets its intended reader act or understand correctly
 
 ### 1. Establish the reader, outcome, and text type
 
-Read the request, supplied text, and applicable project conventions. Identify the main reader and the task or question the text serves.
+* Read the request, supplied text, and applicable project conventions. Identify the main reader and the task or question the text serves.
 
 | Condition | Instruction |
 | --- | --- |
@@ -25,23 +25,23 @@ Read the request, supplied text, and applicable project conventions. Identify th
 | The request combines supported and excluded text | Apply these rules to the supported portion. Use the requested conventions for the remaining text. |
 | The entire request is outside this skill's scope | Use the instructions appropriate to that task instead. |
 
-Select one primary purpose for each section. Use the corresponding instructions below.
+* Select one primary purpose for each section. Use the corresponding instructions below.
 
 | Condition | Instruction |
 | --- | --- |
-| Tutorial: teach through a guided exercise | Begin with what the reader will build. Give a controlled sequence with visible intermediate results. Link extended explanations separately. |
-| How-to or runbook: complete a specific task | Name the task in the title. State prerequisites, ordered actions, decision branches, and the success check. |
-| Reference: retrieve exact facts | Organize entries around the interface or system being described. State accepted values, defaults, requirements, limits, side effects, and errors. |
-| Explanation: understand a bounded topic | Start with the question the explanation answers. Connect mechanisms, constraints, design choices, and consequences. |
+| Tutorial: teach through a guided exercise | Identify the exercise's deliverable in the opening. Arrange the work into a guided sequence with observable checkpoints. Link to detailed explanations outside the exercise. |
+| How-to or runbook: complete a specific task | Use a title that identifies the task. Specify its starting requirements, execution order, conditional paths, and evidence of completion. |
+| Reference: retrieve exact facts | Match the entry structure to the documented interface or system. Cover accepted values, defaults, requirements, limits, side effects, and errors. |
+| Explanation: understand a bounded topic | Open with the question to be resolved. Explain how the system works and how its constraints and design decisions produce the described effects. |
 | README or RFC: serve several related purposes | Give each section a distinct purpose. Separate instructions, reference facts, and rationale under descriptive headings. |
 | PR description, commit message, incident report, or release note | Use the specific pattern in Step 3. Do not force a full documentation structure onto a short engineering text. |
 
-Continue when the reader, outcome, scope, and applicable content types are clear.
+* Continue when the reader, outcome, scope, and applicable content types are clear.
 
 ### 2. Establish facts and preserve technical meaning
 
-Use the available text, code, configuration, tests, schemas, and observed behavior to establish what the document can claim.
-For a wording-only edit, preserve supplied claims unless evidence contradicts them. Do not present preserved claims as independently verified.
+* Use the available text, code, configuration, tests, schemas, and observed behavior to establish what the document can claim.
+* For a wording-only edit, preserve supplied claims unless evidence contradicts them. Do not present preserved claims as independently verified.
 
 | Condition | Instruction |
 | --- | --- |
@@ -54,16 +54,16 @@ For a wording-only edit, preserve supplied claims unless evidence contradicts th
 | A style rule conflicts with exact meaning or protected text | Rewrite the surrounding prose first. Preserve the necessary wording if no equivalent rewrite exists. |
 | A project specifies a required document format or terminology | Follow that convention where it conflicts with a default here. Apply the remaining rules. |
 | A fact changes with versions, dates, or environments | State the relevant version, date, or environment. Avoid volatile details that do not help the reader. |
-| A claim depends on a repository count or generated listing | Verify it against the documented revision. Include the command that reproduces the result when readers need to refresh it. |
+| A claim depends on a repository count or generated listing | Check the count or listing using the revision covered by the document. Provide a regeneration command when readers need updated results. |
 | Supplied text contains stale or misleading claims | Correct or remove them when evidence supports the change. Preserve historical facts with their dates. |
 | A claim cites unnamed evidence | Name the supporting source or remove the attribution. Retain any uncertainty that the evidence leaves unresolved. |
 
-Continue when the supported facts, protected text, and unresolved gaps are identified.
+* Continue when the supported facts, protected text, and unresolved gaps are identified.
 
 ### 3. Apply the writing rules
 
-Use the facts and boundaries from Step 2. Apply the general rules and the patterns for the selected content types.
-Treat the examples as fictional illustrations. Do not copy their names, numbers, or behavior into an unrelated document.
+* Use the facts and boundaries from Step 2. Apply the general rules and the patterns for the selected content types.
+* Treat the examples as fictional illustrations. Do not copy their names, numbers, or behavior into an unrelated document.
 
 #### Organize information for the reader
 
@@ -72,9 +72,9 @@ Treat the examples as fictional illustrations. Do not copy their names, numbers,
 | Opening a document or section | Give the answer, result, or task first. Omit restatements of the request and announcements of what the text will discuss. |
 | Several paths are available | Present the recommended or most common path first. Place alternatives and advanced options after it with criteria for choosing them. |
 | A prerequisite or risk affects an action | State it before the action. Do not postpone it to an appendix, note, or later explanation. |
-| A concept is needed for the next step | Introduce it before that step. Define an unfamiliar concept in fewer than ten words, then explain its details separately. |
+| A concept is needed for the next step | Establish the concept before the reader must apply it. Keep an unfamiliar concept's initial definition below ten words. Put the detailed explanation after that definition. |
 | A section could be read independently | Name its subject and necessary context. Replace references to hidden context with explicit names or descriptive links. |
-| A paragraph covers several topics | Split it by topic. Limit each paragraph to six sentences. |
+| A paragraph covers several topics | Give each topic its own paragraph. Keep every paragraph within the six-sentence limit. |
 | Related sentences lack a clear connection | State the relation with words such as "because", "then", "but", or "as a result". Do not imply unsupported causation. |
 | Sections repeat the same information | Keep the authoritative explanation in one place. Repeat only the context needed to understand an independent section or prevent a mistake. |
 | A page fragments one coherent task | Combine the fragments. Split pages only when readers, tasks, or content types require different treatment. |
@@ -101,11 +101,11 @@ Treat the examples as fictional illustrations. Do not copy their names, numbers,
 
 | Condition | Instruction | Example |
 | --- | --- | --- |
-| An instruction contains more than 20 words | Split it without dropping its condition, object, or consequence. | "If the replica is unavailable, pause the export. Resume the export after the replica reconnects." |
-| A descriptive sentence contains more than 25 words | Split it at a logical boundary. Preserve the relation between the resulting sentences. | "The worker stores completed jobs for seven days. After seven days, it removes their records." |
+| An instruction contains more than 20 words | Divide the instruction into shorter sentences. Retain what triggers the action, what it affects, and what follows from it. | "If the replica is unavailable, pause the export. Resume the export after the replica reconnects." |
+| A descriptive sentence contains more than 25 words | Separate the sentence where its meaning permits a break. Make the connection between the resulting statements explicit. | "The worker stores completed jobs for seven days. After seven days, it removes their records." |
 | A sentence contains separate instructions or independent new facts | Give each instruction or fact its own sentence. Keep simultaneous actions together only when separating them would misrepresent their timing. | "Hold the latch while you lift the cover." |
 | Adjacent sentences have identical openings or lengths | Vary their openings and lengths within the limits. Retain a longer sentence when its single point needs a condition or consequence. | "The scan stops. If the checksum differs, the worker records the mismatch before it exits." |
-| The actor is known | Name the actor and use active voice. Use passive voice only when the actor is unknown or irrelevant to the meaning. | "The scheduler assigns the job." |
+| The actor is known | Make the actor the subject of an active verb. Reserve passive wording for an unidentified actor or one whose identity does not affect the meaning. | "The scheduler assigns the job." |
 | Stable behavior is described | Use the simple present. Use the simple past for completed events and future forms only for actual future events. | "The client retries the request." |
 | A complex tense or verbal "-ing" construction obscures an action | Rewrite it with an explicit actor and a simple verb. Preserve established technical terms and necessary time relationships. | Replace "The task has completed, leaving a lock" with "The task completed. The lock remains." |
 | A nominalization hides the action | Replace the abstract noun and support verb with a direct verb. | Replace "perform a comparison" with "compare". |
@@ -119,20 +119,20 @@ Treat the examples as fictional illustrations. Do not copy their names, numbers,
 | A possessive construction is ambiguous | Rewrite it with an explicit relation. | "The policy for the tenant". |
 | A semicolon or sentence-level dash joins statements | Replace it with a period or an explicit conjunction. Preserve ranges, negative signs, flags, and hyphens within words. | "The cache expired. Fetch a new token." |
 
-Count words separated by whitespace. Count each inline code span as one unit. Exclude fenced code and exact quotations from sentence limits.
-Count each sentence within a list item separately. Do not disguise prose as code or a quotation to bypass the limits.
+* Count words separated by whitespace. Count each inline code span as one unit. Exclude fenced code and exact quotations from sentence limits.
+* Count each sentence within a list item separately. Do not disguise prose as code or a quotation to bypass the limits.
 
 #### Express obligations and uncertainty exactly
 
 | Condition | Instruction | Example |
 | --- | --- | --- |
-| "Should" expresses a required action | Write a direct command in a procedure. Use "must" in a descriptive statement only when the requirement is established. | "Set `region` before you create the client." |
-| "Should" expresses a recommendation | State the recommendation and its reason. Do not replace it with "must". | "We recommend a retry limit because repeated attempts consume the request budget." |
-| "Should" introduces a condition | Replace it with "if". | "If the transfer stops, inspect the destination log." |
-| "May", "might", or "could" expresses uncertainty | State what is possible or unknown. Retain the qualifier if a rewrite would strengthen the claim. | "A stale lease is a possible cause. The logs do not establish the cause." |
-| "May" expresses permission | State the permission explicitly. Preserve normative keywords in an interface contract. | "The policy permits local caching." Keep `MAY` unchanged in a protocol requirement. |
-| "Can" expresses capability | Use it only for an established capability or possibility. Do not use it to imply permission when permission matters. | "The client can decode compressed responses." |
-| "Would" expresses a hypothetical result | State the hypothesis before the result. Do not present a hypothetical change as implemented behavior. | "With the proposed index, the query would avoid a full scan." |
+| "Can" identifies what a person or system is able to do | Use "can" only for an established capability or possibility. Do not use it to imply permission when permission matters. | "The client can decode compressed responses." |
+| "May" identifies an action that is allowed | State the permission explicitly. Preserve normative keywords in an interface contract. | "The policy permits local caching." Keep `MAY` unchanged in a protocol requirement. |
+| "Should" is used for an action that is actually mandatory | Write a direct command in a procedure. Use "must" in a descriptive statement only when the requirement is established. | "Set `region` before you create the client." |
+| "Should" identifies a preferred action rather than a requirement | State the recommendation and its reason. Do not turn the recommendation into a requirement. | "We recommend a retry limit because repeated attempts consume the request budget." |
+| "May", "might", or "could" marks a possibility that is not established as fact | State what is possible or unknown. Retain the qualifier if a rewrite would strengthen the claim. | "A stale lease is a possible cause. The logs do not establish the cause." |
+| "Would" describes a result that depends on an assumed change | State the hypothesis before the result. Do not present a hypothetical change as implemented behavior. | "With the proposed index, the query would avoid a full scan." |
+| "Should" opens a conditional clause rather than giving advice | Replace it with "if". | "If the transfer stops, inspect the destination log." |
 
 #### Write procedures and warnings
 
@@ -146,62 +146,63 @@ Count each sentence within a list item separately. Do not disguise prose as code
 | The reader must recognize success | State the observable result, expected output, or check. Include expected intermediate results where they prevent confusion. |
 | A predictable failure has a known remedy | State the symptom and recovery action. Add the cause only when evidence establishes it. |
 | An action can cause harm or data loss | Place a warning before the action. Start with the protective command or triggering condition, then state the specific consequence. |
-| A warning needs a severity label | Use the project's severity vocabulary. Otherwise, label injury risks "Warning" and damage or data-loss risks "Caution". |
-| Injury and damage risks occur together | Use the injury-level warning. Describe both consequences when both affect the reader's decision. |
-| A note contains a required action or limit | Move that content into the procedure beside the affected action. Keep notes optional to successful completion. |
+| A warning needs a severity label | Follow the project's labels. Without a project convention, use "Warning" for possible injury. Use "Caution" for possible damage or data loss. |
+| Injury and damage risks occur together | Select the label required for injury. Include the damage consequence too when it changes the reader's decision. |
+| A note contains a required action or limit | Place the requirement in the relevant procedure step. Keep every action and limit needed for completion in required procedure text. |
 | A procedure calls an action "simple", "easy", or "quick" | Remove the judgment. State the actual action, prerequisites, and result. |
 | An instruction adds "please" without changing its meaning | Remove the politeness filler. State the action directly. |
 
 #### Remove empty and formulaic language
 
-Apply substitutions only when the phrase has the listed ordinary meaning. Preserve technical names and semantic distinctions from Step 2.
-Delete wording that contributes no information. If a substitution changes the meaning, rewrite the sentence instead.
-For an unlisted expression, name its concrete action or fact. Remove it if it contributes neither.
+* Match the phrase's meaning before applying a rule. Preserve technical names, facts, scope, timing, certainty, permission, and obligation.
+* If a replacement changes the sentence's meaning, keep the original or rewrite the sentence. Ask for missing facts instead of guessing.
+* The examples are fictional. Treat added details as supplied facts, not facts to invent for another document.
+* For unlisted wording, name the concrete action or fact. Remove wording that adds neither.
 
-| Condition | Instruction |
-| --- | --- |
-| "Utilize", "leverage", or "harness" means use | Replace it with "use". |
-| "In order to" introduces a purpose | Replace it with "to". |
-| "Prior to", "in the event that", or "due to the fact that" adds bulk | Replace it with "before", "if", or "because", respectively. |
-| "Ensure" or "make sure" hides an unspecified check | Name what the reader must inspect, compare, measure, or validate. |
-| "It is worth noting", "it is important to", or a similar aside announces importance | Delete the announcement. State the fact or consequence directly. |
-| "Simply", "just", "seamlessly", or "effortlessly" adds no condition or fact | Delete it. Preserve "just" when it denotes a necessary time or quantity distinction. |
-| "Robust", "powerful", "comprehensive", or "performant" replaces evidence | State the supported property or remove the claim. Never invent a measurement to make the sentence concrete. |
-| "Functionality" hides a specific function or feature | Name that function or feature. |
-| "Enables you to" or "allows you to" describes capability | Replace it with "you can". Preserve explicit permission when permission is the subject. |
-| "Is designed to" or "aims to" adds no distinction | State the established behavior directly. Retain intent when the result is proposed, uncertain, or not yet implemented. |
-| "Facilitate", "foster", "empower", or "bolster" describes help | Use "help" or "support", or state the actual effect. |
-| "Dive into" or "delve into" describes investigation | Name the action: read, inspect, or examine. |
-| "When it comes to" introduces a topic | Remove the phrase or replace it with "for". |
-| "As needed" or "as necessary" omits a decision criterion | State the triggering condition. If the condition is unknown, identify the missing criterion. |
-| "E.g.", "i.e.", or "etc." obscures the scope | Write "for example" or "that is". Replace "etc." with the relevant items or identify the list as partial. |
-| "Gracefully handles" hides behavior | Describe the actual recovery, fallback, retry, or failure behavior. |
-| "Out of the box" or "under the hood" is figurative | Write "by default" or "internally" when that is the intended meaning. |
-| "Blazingly fast" or similar hype asserts speed | Give a supported measurement with its conditions, or remove the claim. |
-| "Streamline", "enhance", or "elevate" hides a change | Name what becomes simpler, improves, or increases. State the relevant comparison when known. |
-| "Plethora" or "myriad" means many | Write "many", or give a supported count when the count matters. |
-| "Addresses the issue" or "tackles" hides a correction | Name the fault and the behavior that changes. |
-| "Pivotal", "crucial", "paramount", or "a testament" inflates significance | Remove it and state the supported consequence. |
-| "Tapestry", "synergy", "realm", "landscape", or "interplay" is figurative | State the concrete system, area, or interaction. Delete the phrase if it contributes no fact. |
-| "Intricate", "nuanced", "multifaceted", or "holistic" hides specific complexity | Name the parts, constraints, or coverage that matter. |
-| "Groundbreaking", "cutting-edge", "state-of-the-art", "innovative", or "unprecedented" promotes novelty | Remove the promotion. State what is new only when the comparison is supported. |
-| "Transformative", "game-changer", or "revolutionize" promises an unspecified effect | State the actual change. |
-| "Showcase", "underscore", or "emphasize" means show | Replace it with "show", or state the fact directly. |
-| "Furthermore", "moreover", "that being said", or "notwithstanding" obscures a relation | Use "also", "but", or a precise statement of the exception. |
-| "In conclusion", "in summary", or "at the end of the day" introduces repetition | Delete the setup phrase. Apply the rule for conclusions to the remaining text. |
-| "Embark" or "endeavor" means start or try | Replace it with "start" or "try". |
-| "Meticulous" or "meticulously" praises a process without evidence | State the relevant check or method. |
-| "Paradigm", "navigate", or "boasts" means model, go to, or has | Use the plain term when it preserves the meaning. |
-| "Vibrant", "bustling", "nestled", or "in the heart of" decorates a description | Remove the decoration. State the location, activity, or property if relevant. |
-| "However", "therefore", or causal "since" complicates the relation | Use "but", "as a result", or "because". Preserve temporal "since". |
-| "Perform", "reach", or "repeat" makes an action less direct | Use the exact action verb. Keep the original word when it is already the shortest precise choice. |
-| "Avoid", "acceptable", or "complete" carries a distinct meaning | Preserve the distinction. State a known limit instead of "acceptable" when that limit determines the decision. |
-| "Any" or "now" appears unnecessary | Remove it only if scope and timing remain unchanged. |
-| "Not only ... but also" or "not X, but Y" adds rhetorical contrast | State the relevant fact directly. Retain a contrast only when it corrects a likely misunderstanding. |
-| Three parallel phrases merely decorate a point | Keep only the phrases that add distinct information. |
-| "Ranging from X to Y" implies a false scale | State the actual limits or identify X and Y as examples. |
-| Greetings, praise, apologies, AI disclaimers, or offers of further help remain in the deliverable | Remove conversational residue. Preserve statements required by the document's purpose or supplied policy. |
-| Unreleased functionality is described as current behavior | Remove the claim or identify it explicitly as a proposal or dated plan. |
+| Condition | Instruction | Example |
+| --- | --- | --- |
+| "Utilize", "leverage", "harness": ordinary use | Write "use" when the operation stays the same. | "Utilize the local compiler" → "Use the local compiler". |
+| "Functionality": unnamed feature | Name the feature. | "The editor has undo functionality" → "The editor has undo". |
+| "Enables you to", "allows you to": capability | Write "can". Preserve explicit permission. | "The viewer enables you to rotate pages" → "You can rotate pages in the viewer". |
+| "Facilitate", "foster", "empower", "bolster": help | Name the help or supported effect. | "Hints facilitate navigation" → "Hints help readers navigate". |
+| "Dive into", "delve into": investigation | Name the inspection or analysis. | "Delve into the crash report" → "Examine the crash report". |
+| "Showcase", "underscore", "emphasize": display | Write "show" only when emphasis adds no meaning. | "The table showcases supported encodings" → "The table shows supported encodings". |
+| "Embark", "endeavor": starting or trying | Write "start" or "try" without implying success. | "Endeavor to reproduce the timeout" → "Try to reproduce the timeout". |
+| "Paradigm", "navigate", "boasts": inflated wording | Name the model, destination, or property. | "The tool boasts offline search" → "The tool has offline search". |
+| "Perform", "reach", "repeat": indirect action | Use the exact operation. Keep an already precise verb. | "Perform a reload of the preview" → "Reload the preview". |
+| "In order to": purpose | Write "to". | "Open the panel in order to inspect headers" → "Open the panel to inspect headers". |
+| "Prior to", "in the event that", "due to the fact that" | Use "before", "if", or "because" for the same relation. | "Save prior to closing the tab" → "Save before closing the tab". |
+| "Furthermore", "moreover", "that being said", "notwithstanding" | Use "also", "but", or an explicit exception. | "The file loads. Moreover, its checksum matches" → "The file loads. Its checksum also matches". |
+| "However", "therefore", "since": sentence connections | Use "but", "as a result", or "because". Keep temporal "since". | "Since the disk is full, the write fails" → "Because the disk is full, the write fails". |
+| "Ensure", "make sure": unspecified check | Name what to inspect and what must hold. | "Ensure a valid port (1–65535)" → "Check that the port is between 1 and 65535, inclusive". |
+| "As needed", "as necessary": missing trigger | State the trigger. Ask when it is unknown. | "Refresh as necessary" → Ask: "What condition requires a refresh?". |
+| "Gracefully handles": unspecified response | Describe the actual recovery or failure behavior. | "It gracefully handles invalid rows by skipping them" → "It skips invalid rows". |
+| "Is designed to", "aims to": intent or behavior | State verified behavior directly. Keep unconfirmed intent explicit. | "The proposal aims to reduce lock contention" → Keep: the reduction is not established. |
+| "Supports", "is available": unreleased feature | Remove the claim or label the proposal or dated plan. | "Offline editing is available (planned)" → "Offline editing is planned". |
+| "Robust", "powerful", "comprehensive", "performant": unsupported praise | Give the supported property or delete the praise. | "A robust parser that rejects duplicate keys" → "A parser that rejects duplicate keys". |
+| "Blazingly fast": unsupported speed claim | Give a measurement and its conditions, or remove the claim. | "Blazingly fast export" → "Export" when no measurement supports the claim. |
+| "Streamline", "enhance", "elevate": unspecified improvement | Name the change and any known comparison. | "Streamlines login by removing one prompt" → "Removes one login prompt". |
+| "Addresses the issue", "tackles": unnamed correction | Name the fault and corrected behavior. | "Addresses the issue of duplicate alerts" → "Prevents duplicate alerts" when prevention is confirmed. |
+| "Pivotal", "crucial", "paramount", "a testament": inflated significance | State the supported consequence. | "The backup is crucial: it is the only recovery copy" → "The backup is the only recovery copy". |
+| "Intricate", "nuanced", "multifaceted", "holistic": unexplained complexity | List the relevant parts, limits, or coverage. | "Holistic checks covering lint, builds, and tests" → "Checks: lint, builds, and tests". |
+| "Groundbreaking", "cutting-edge", "state-of-the-art", "innovative", "unprecedented" | Identify what is new. Delete unsupported promotion. | "An innovative option for hiding empty columns" → "An option for hiding empty columns". |
+| "Transformative", "game-changer", "revolutionize": vague benefit | State the actual effect. | "Revolutionizes review with inline comments" → "Adds inline comments to reviews" when the feature is new. |
+| "Meticulous", "meticulously": unsupported process praise | Name the checks performed. | "Meticulously checked field names against the schema" → "Checked field names against the schema". |
+| "Plethora", "myriad": quantity | Use "many", or a supported count when relevant. | "A plethora of adapters" → "Many adapters". |
+| "E.g.", "i.e.", "etc.": unclear list scope | Use "for example" or "that is". Name omitted items or mark examples. | "Supports formats, e.g. PNG and WebP" → "Supported formats include PNG and WebP". |
+| "Out of the box", "under the hood": figurative behavior | State "by default" or "internally" when accurate. | "Uses UTF-8 out of the box" → "Uses UTF-8 by default". |
+| "Tapestry", "synergy", "realm", "landscape", "interplay": metaphor | Name the system or relation. Delete empty imagery. | "Within the realm of the build system" → "In the build system". |
+| "Vibrant", "bustling", "nestled", "in the heart of": decoration | State the relevant location or activity. | "The file is nestled in the project root" → "The file is in the project root". |
+| "Avoid", "acceptable", "complete": distinct meanings | Keep the distinction. Give known limits when they determine acceptance. | "This check can help avoid data loss" ≠ "This check prevents data loss". Keep the qualified claim. |
+| "Any", "now": possible scope or timing | Delete only when scope and timing stay unchanged. | "Do not delete any backups" → Keep "any": the prohibition covers every backup. |
+| "Simply", "just", "seamlessly", "effortlessly": filler | Remove empty judgments. Keep timing and quantity distinctions. | "Simply select the profile" → "Select the profile". Keep "just" in "The job just finished". |
+| "It is worth noting", "it is important to": announcement | Start with the fact or consequence. | "It is worth noting that drafts expire" → "Drafts expire". |
+| "When it comes to": topic announcement | Delete the lead-in or use "for". | "When it comes to previews, use sample data" → "For previews, use sample data". |
+| "In conclusion", "in summary", "at the end of the day": repetition | Delete the setup. Keep only a new decision, consequence, or action. | "In conclusion, deploy after approval" → "Deploy after approval" if this adds the next action. |
+| "Not only … but also", "not X, but Y": rhetorical contrast | State the facts directly. Keep contrasts that prevent misunderstanding. | "Not only saves drafts but also restores them" → "Saves and restores drafts". |
+| Three decorative phrases, such as "reliable, dependable, trustworthy" | Keep only distinct information. | "Reliable, dependable, trustworthy storage" → "Reliable storage" if reliability is established. |
+| "Ranging from X to Y": false scale | Give real boundaries or label the items as examples. | "Options ranging from CSV export to dark mode" → "Options include CSV export and dark mode". |
+| "Hello", "sorry", "as an AI", "let me know": chat residue | Remove conversational text. Keep statements required by the document or policy. | "Let me know if the command fails" → Delete from a command reference. |
 
 #### Format structure and technical examples
 
@@ -246,11 +247,11 @@ For an unlisted expression, name its concrete action or fact. Remove it if it co
 | Signed evidence and operational logs support different claims | Distinguish what each establishes. Do not treat a corroborating log as proof of a signature or security property. |
 | A security claim uses "secure", "safe", or "trusted" | Define the precise property and conditions, or remove the claim. |
 
-Continue when the requested text or review covers the reader's goal and preserves the facts and gaps identified in Step 2.
+* Continue when the requested text or review covers the reader's goal and preserves the facts and gaps identified in Step 2.
 
 ### 4. Check the result and correct violations
 
-Compare the result with the original request and material. Use every applicable check below before delivery.
+* Compare the result with the original request and material. Use every applicable check below before delivery.
 
 | Condition | Instruction |
 | --- | --- |
@@ -267,4 +268,4 @@ Compare the result with the original request and material. Use every applicable 
 | Delivering a rewrite | Return the requested artifact. Add a brief note only for material unresolved facts or validation limits that affect its use. |
 | Delivering a review | Return the affected passages, violated instructions, and proposed corrections. Separate confirmed errors from facts that still need verification. |
 
-Repeat the affected checks after corrections. Finish when the requested result meets the applicable rules and material unresolved gaps remain explicit.
+* Repeat the affected checks after corrections. Finish when the requested result meets the applicable rules and material unresolved gaps remain explicit.
