@@ -1,6 +1,6 @@
 # agent-skills
 
-Version: 1.0.0
+Version: 1.1.0
 
 Skills for AI agents to create reusable procedures and write clear technical documentation. They help agents define actions, preserve meaning, and check results.
 
