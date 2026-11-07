@@ -1,6 +1,8 @@
 ---
 name: technical-writing-rules
 description: Write, revise, or review English technical documentation and engineering texts using concrete rules for structure, accuracy, language, and formatting. Use for READMEs, tutorials, how-to guides, runbooks, API references, RFCs, incident reports, release notes, PR descriptions, and commit messages. Do not use for marketing, product UI copy, prompts, or general chat replies.
+metadata:
+  version: "1.1.0"
 ---
 
 # Technical writing rules

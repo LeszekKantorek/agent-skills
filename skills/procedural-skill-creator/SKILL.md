@@ -1,6 +1,8 @@
 ---
 name: procedural-skill-creator
 description: Use to create or revise skills as executable procedures with clear decisions, connected steps, and verifiable results.
+metadata:
+  version: "1.1.0"
 ---
 
 # Create Executable Skills
@@ -11,7 +13,7 @@ Create skills that guide agents through connected actions and justified decision
 
 ## Steps
 
-1. **Establish the capability and its boundaries.**
+### 1. Establish the capability and its boundaries
 
 * Establish what the skill must achieve, when it applies, and what work it covers.
 * Use the user's intent, supplied procedures, examples, and relevant existing skills.
@@ -27,10 +29,10 @@ Create skills that guide agents through connected actions and justified decision
 | What work belongs within this capability? | Its responsibility and boundary with adjacent work | Preserve new findings. Inspect related records. Broader reorganization belongs to collection maintenance. |
 | What is established, and what remains open? | Accepted requirements and constraints, distinguished from examples, proposals, and unresolved choices | An audit report appears in a supplied example. Whether the new skill needs one remains undecided. |
 
-* Use the table as a starting point for analysis. Formulate other questions when needed to understand the capability and its boundaries. Examine these questions.
+* Use the table as a starting point for analysis. Formulate and examine other questions when needed to understand the capability and its boundaries.
 * Continue when the outcome, conditions of use, inputs, and responsibility are clear and unresolved requirements or design choices are explicit.
 
-2. **Design the flow of decisions and results.**
+### 2. Design the flow of decisions and results
 
 * Define how the target skill will use its inputs to achieve its intended result within the scope from Step 1.
 * Arrange actions into steps according to the information they require and the results needed by subsequent steps.
@@ -48,10 +50,10 @@ Create skills that guide agents through connected actions and justified decision
 * Examine other design questions when the flow remains unclear. Adapt the steps to the work required.
 * Continue when each step produces a useful result. Each supported branch must lead to another action or identify an unresolved condition.
 
-3. **Write the instructions and decision aids.**
+### 3. Write the instructions and decision aids
 
 * Express the flow from Step 2 as instructions that specify actions, their objects, and relevant conditions.
-* Write a short frontmatter description for skill selection. State the outcome in a one-sentence Goal. Organize actions into numbered steps.
+* Write a short frontmatter description for skill selection. State the outcome in a one-sentence Goal. Organize ordered actions into numbered lists for short procedures or numbered `###` headings for substantial steps. Keep subordinate instructions and tables within the step they qualify.
 * State each step's purpose, inputs, and necessary guidance. Add decision aids when they clarify a choice or ambiguity.
 * Use the table to select a suitable form.
 
@@ -66,14 +68,14 @@ Create skills that guide agents through connected actions and justified decision
 
 * Adapt the form when no listed option supports the decision. For open tables, explain what to do when no row fits.
 * Preserve established constraints when adapting examples or decision aids.
-* Place guidance for interpreting a decision aid after that aid. State when the step is complete. Combine points that serve one purpose.
+* Introduce a decision aid when its purpose is unclear. Keep interpretation guidance next to the aid it qualifies. State when the step is complete. Combine points that serve one purpose.
 * Use filled examples to clarify choices or results when needed. Present fictional tasks as illustrations, not instructions to execute.
 * Keep the procedure self-contained when practical. Add resources only when execution or conditional reading requires them.
-* Consult [authoring-examples.md](references/authoring-examples.md) when an instruction remains unclear or a step needs a concrete model.
+* Consult [authoring-examples.md](references/authoring-examples.md) when choosing Markdown structure, clarifying an instruction, or modeling a step.
 * Save the skill and required resources in the requested location.
 * Continue when the skill expresses the intended flow, with essential context and unresolved requirements visible.
 
-4. **Remove repetition without losing decisions.**
+### 4. Remove repetition without losing decisions
 
 * Remove text that adds no useful guidance. Preserve the instructions and distinctions needed to achieve the intended result.
 * Review the draft from Step 3, including tables and examples, against the scope and outcome established in Step 1.
@@ -92,7 +94,7 @@ Create skills that guide agents through connected actions and justified decision
 * Choose another revision when the listed options do not address the problem.
 * Continue when each retained passage supports execution and the procedure still achieves its intended outcome.
 
-5. **Check the complete procedure against representative use.**
+### 5. Check the complete procedure against representative use
 
 * Check the complete procedure against the scope, inputs, outcome, requirements, and unresolved choices established in Step 1. Check that it follows the flow designed in Step 2.
 * Compare the description and Goal with the complete procedure after the revisions in Step 4.
@@ -107,6 +109,7 @@ Create skills that guide agents through connected actions and justified decision
 | Decision quality | Tables and examples enable choices rather than repeat slogans | Supply relevant criteria or remove an unhelpful aid. |
 | Completion | The final check compares the result with original needs, including unresolved items | Restore dropped needs or make their unresolved state explicit. |
 | Structure and resources | Metadata, paths, references, and any executable helpers are usable | Correct structural errors and exercise helpers relevant to the change. |
+| Markdown structure | Headings, lists, and tables preserve scope and execution order in source and rendered output | Correct detached subordinate content, broken nesting, or skipped heading levels. |
 
 * Add checks when the table does not cover a consequence that could affect execution.
 * To check agent behavior, run a representative task with the target skill. Compare the result with the intended outcome.
