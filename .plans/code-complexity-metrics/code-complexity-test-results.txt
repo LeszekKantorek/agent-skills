@@ -1,0 +1,37 @@
+
+> test
+> node --test
+
+✔ repository: CLI parses both languages, deterministic output, sources unchanged (886.995ms)
+✔ rust: prompt A, flat conditions (9.8426ms)
+✔ rust: prompt B, nested conditions (0.3183ms)
+✔ rust: formatting and comments do not change statements (0.3016ms)
+✔ rust: 4 independent conditions (0.3077ms)
+✔ rust: 8 independent conditions (0.4179ms)
+✔ rust: 64 independent conditions (3.072ms)
+✔ rust: early returns do not add decisions (0.2883ms)
+✔ rust: empty function has numeric base complexity one (0.2054ms)
+✔ rust: counts source decisions without reachability analysis (0.2052ms)
+✔ rust: malformed source carries a diagnostic (0.7526ms)
+✔ rust: unsupported constructs are rejected by the experiment (1.2284ms)
+✔ javascript: prompt A, flat conditions (4.4077ms)
+✔ javascript: prompt B, nested conditions (0.2087ms)
+✔ javascript: formatting and comments do not change statements (0.213ms)
+✔ javascript: 4 independent conditions (0.1768ms)
+✔ javascript: 8 independent conditions (0.2722ms)
+✔ javascript: 64 independent conditions (1.9693ms)
+✔ javascript: early returns do not add decisions (0.104ms)
+✔ javascript: empty function has numeric base complexity one (0.0652ms)
+✔ javascript: counts source decisions without reachability analysis (0.0784ms)
+✔ javascript: malformed source carries a diagnostic (0.0711ms)
+✔ javascript: unsupported constructs are rejected by the experiment (0.2939ms)
+✔ Rust tail expression is a statement without a semicolon (0.1459ms)
+✔ JS regex/string braces and nested anonymous functions remain distinct syntax (0.6602ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 944.0871
