@@ -10,6 +10,7 @@ The shared rules and the relevant language document form one scoring profile:
 The complete scoring profile has the following requirements:
 
 * This profile defines scoring and test expectations. Gaps must be resolved before affected constructs are implemented.
+* Measurements use written syntax, without resolving types or counting executed paths.
 * Rules are versioned independently of the parser. Parser updates do not change the scoring rules.
 * An **outer** is a function without an enclosing function. Only outers receive report records and contribute to reported function counts.
 * Module-level functions, methods, anonymous functions, and closures outside another function can be outers. Visibility and exports do not determine ownership.
@@ -84,7 +85,6 @@ Nesting depth follows these requirements:
 
 * Entering a nested function or closure preserves the current depth and increases it by 1.
 * Scored constructs inside the nested function use that depth. The previous depth resumes outside the function.
-* The profile remains syntactic.
 
 ### Loops, selections, and jumps
 

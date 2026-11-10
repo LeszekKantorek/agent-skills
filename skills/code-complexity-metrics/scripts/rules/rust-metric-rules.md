@@ -7,7 +7,9 @@ The [generic metric rules](generic-metric-rules.md) define shared scoring, owner
 Rust function syntax has the following mappings:
 
 * `fn` items, `impl` methods, and closures are functions under the generic ownership rules.
+* An `async` block does not create a function boundary.
 * Macro invocations and definitions do not create function records.
+* Rust `cfg` attributes do not filter the source.
 
 ## Cyclomatic Complexity
 
@@ -187,14 +189,16 @@ fn outer() {
 
 ### Block values
 
-Rust block expressions follow the [generic block rules](generic-metric-rules.md#code-blocks). Async blocks use the interpretation in [Rust async blocks](../../references/limitations.md#rust-async-blocks).
+Rust block expressions follow the [generic block rules](generic-metric-rules.md#code-blocks).
 
 Complete block-expression scores are shown below:
 
 | Rule | Description | Example | Point |
 | --- | --- | --- | ---: |
+| Async block | An async block contributes an extra-block point. | `async { work() }` | +1 block point |
 | Nested-block total | Three extra blocks around one final constant value | `fn f() -> i32 { { { { 1 } } } }` | 4 |
 | Block-initializer total | A declarator initialized by a block containing two calls and a tail value | `let result = { prepare(); calculate() };` | 5 |
+| Async-closure total | A closure declarator containing an async block with one returned call | `fn f() { let c = \|\| async { work() }; }` | 4 |
 
 Examples:
 
@@ -217,6 +221,15 @@ fn initializer() {
     };
 }
 // Statement Count: 5
+```
+
+```rust
+fn example_async() {
+    let c = || async { // +1: declarator; +1: extra block
+        work()         // +1: call; +1: implicit return
+    };
+}
+// Statement Count: 4
 ```
 
 ### Pattern bindings in Rust

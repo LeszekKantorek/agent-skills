@@ -73,7 +73,7 @@
         "properties": {
           "location": {
             "type": "string",
-            "description": "File path, line, and column of the outer function."
+            "description": "File path, line, and column of the outer function. Source edits can change this value."
           },
           "name": {
             "type": [

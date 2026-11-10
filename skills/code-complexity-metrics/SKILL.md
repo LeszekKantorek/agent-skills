@@ -14,6 +14,7 @@ Usage:
 
 Requirements:
   Node 24 LTS.
+  Verified platform: Windows.
   The complete skill directory, including scripts/ and vendor/.
   No npm install, compilation, or internet connection is required.
 
