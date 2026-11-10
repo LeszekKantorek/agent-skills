@@ -44,7 +44,7 @@ test('CSV format writes filtered metrics and explain still produces Markdown',as
   assert.match(csv,/^# Code Complexity Metrics\n# Files: 1; functions found: 2; functions presented: 1\n/);
   assert.match(csv,/Name,Location,Cognitive,Cyclomatic,Statements\nprocess,"a,b\.js:1:1",0,1,1\n$/);
   const explained=run(dir,'--path','a,b.js','--format','csv','--explain');
-  assert.equal(explained.status,0);assert.match(explained.stdout,/^# Code Complexity Metrics\n\n/);assert.match(explained.stdout,/```javascript/);
+  assert.equal(explained.status,0);assert.match(explained.stdout,/^Files: 1; functions found: 2; functions presented: 2\n\n/);assert.match(explained.stdout,/```javascript/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('explain increments sum to reported metrics, including operator lines',async()=>{
@@ -67,7 +67,7 @@ test('explain shows increments for an outer inside template interpolation',async
  try {
   await writeFile(path.join(dir,'a.js'),'const x = `start\n${() => {\n if(a) {}\n}}\nend`;');
   const r=run(dir,'--path','a.js','--explain'); assert.equal(r.status,0);
-  assert.match(r.stdout,/if\(a\) \{\} \/\/ Cognitive: \+1/);
+  assert.match(r.stdout,/if\(a\) \{\} +\/\/ Cognitive: \+1/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('scoring comments remain outside multiline literals',async()=>{
@@ -75,7 +75,7 @@ test('scoring comments remain outside multiline literals',async()=>{
  try {
   await writeFile(path.join(dir,'a.js'),'function f(){\n const s = `first\nsecond\nlast`;\n return s;\n}');
   const r=run(dir,'--path','a.js','--explain');assert.equal(r.status,0);
-  assert.match(r.stdout,/`first\nsecond\nlast`; \/\//);
+  assert.match(r.stdout,/`first\nsecond\nlast`; +\/\//);
   assert.match(r.stdout,/\/\/ line 2:/);assert.match(r.stdout,/\/\/ line 3:/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
@@ -143,8 +143,8 @@ test('UC-15 assigns logical operators to their lines and sums increments',async(
  try {
   await writeFile(path.join(dir,'a.js'),'function f(){\n return a &&\n b ||\n c;\n}');
   const r=run(dir,'--path','a.js','--explain','--format','json');assert.equal(r.status,0);
-  assert.match(r.stdout,/return a && \/\/ Cognitive: \+1.*Cyclomatic: \+1/);
-  assert.match(r.stdout,/b \|\| \/\/ Cognitive: \+1.*Cyclomatic: \+1/);
+  assert.match(r.stdout,/return a && +\/\/ Cognitive: \+1.*Cyclomatic: \+1/);
+  assert.match(r.stdout,/b \|\| +\/\/ Cognitive: \+1.*Cyclomatic: \+1/);
   assert.match(r.stdout,/\/\/ Cognitive: 2; Cyclomatic: 3; Statements: 1/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });

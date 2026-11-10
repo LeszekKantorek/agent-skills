@@ -210,6 +210,6 @@ function selection_value(){1+(a?1:2);}
       assert.deepEqual(totals,expected[name],name);
       assert.equal(lines.at(-1),`// Cognitive: ${totals[0]}; Cyclomatic: ${totals[1]}; Statements: ${totals[2]}`);
     });
-    assert.match(explained.stdout,/&& x>0 \{\} \/\/ Cognitive: \+1 \(&&\); Cyclomatic: \+1 \(&&\); Statements: 0/);
+    assert.match(explained.stdout,/&& x>0 \{\} +\/\/ Cognitive: \+1 \(&&\); Cyclomatic: \+1 \(&&\); Statements: 0/);
   } finally { await rm(dir,{recursive:true,force:true}); }
 });

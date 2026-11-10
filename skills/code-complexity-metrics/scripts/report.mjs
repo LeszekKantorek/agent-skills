@@ -17,7 +17,22 @@ function explain(record,info) {
  const {source,comments,literals}=info;
  const chars=source.split('');
  for(const [start,end] of comments) for(let i=start;i<end;i++) if(chars[i]!=='\n' && chars[i]!=='\r') chars[i]=' ';
- const lines=chars.join('').slice(record.startIndex,record.endIndex).split(/\r?\n/);
+ // Expand tabs outside literals in the report copy so alignment is viewer-independent.
+ let column=0;
+ const excerpt=chars.slice(record.startIndex,record.endIndex).map((char,i)=>{
+  if(char==='\n' || char==='\r') {column=0;return char;}
+  const size=char==='\t'?8-column%8:1;
+  column+=size;
+  const index=record.startIndex+i;
+  return char==='\t' && !literals.some(([,,start,end])=>index>=start && index<end)?' '.repeat(size):char;
+ }).join('');
+ const lines=excerpt.split(/\r?\n/);
+ const literalAt=lines.map((_,i)=>{
+  const row=record.start_line-1+i;
+  return literals.find(([start,end,startIndex,endIndex])=>startIndex>=record.startIndex && endIndex<=record.endIndex && row>=start && row<end);
+ });
+ const columns=line=>[...line].reduce((column,char)=>column+(char==='\t'?8-column%8:1),0);
+ const width=Math.max(0,...lines.map((line,i)=>literalAt[i]?0:columns(line.trimEnd())));
  const deferred=new Map(), output=[];
  function annotation(row) {
   return keys.map(([label,key])=>{
@@ -29,9 +44,12 @@ function explain(record,info) {
  }
  for(let i=0;i<lines.length;i++) {
   const row=record.start_line-1+i;
-  const literal=literals.find(([start,end,startIndex,endIndex])=>startIndex>=record.startIndex && endIndex<=record.endIndex && row>=start && row<end);
+  const literal=literalAt[i];
   if(literal) { output.push(lines[i]); const list=deferred.get(literal[1])??[]; list.push(`// line ${row+1}: ${annotation(row)}`); deferred.set(literal[1],list); }
-  else output.push(`${lines[i]} // ${annotation(row)}`);
+  else {
+   const code=lines[i].trimEnd();
+   output.push(`${code}${' '.repeat(width-columns(code)+1)}// ${annotation(row)}`);
+  }
   if(deferred.has(row)) output.push(...deferred.get(row));
  }
  output.push('// '+keys.map(([label,key])=>`${label}: ${record.metrics[key]}`).join('; '));
@@ -41,9 +59,17 @@ function explain(record,info) {
  return `${fence}${record.language==='javascript'?'javascript':'rust'}\n${content}\n${fence}\n`;
 }
 export function markdown(report,records,sourceInfo,showExplain) {
- let out=`# Code Complexity Metrics\n\nFiles: ${report.summary.files}; functions found: ${report.summary.functions_found}; functions presented: ${report.summary.functions_presented}\n\n`;
+ let out=showExplain?'':'# Code Complexity Metrics\n\n';
+ out+=`Files: ${report.summary.files}; functions found: ${report.summary.functions_found}; functions presented: ${report.summary.functions_presented}\n\n`;
  out+=`Schema: ${report.schema_version}; rules: ${report.rules_version}; analyzer: ${report.analyzer_version}; parser: ${report.parser.package} ${report.parser.version}\n\n`;
  const cell=value=>String(value).replaceAll('\\','\\\\').replaceAll('|','\\|').replace(/\r?\n/g,' ');
+ if(showExplain) {
+  for(const r of records) {
+   out+=`## ${cell(r.name??'(anonymous)')} — ${cell(`${r.file}:${r.start_line}:${r.start_column}`)}\n\n`;
+   out+=explain(r,sourceInfo.get(r.file))+'\n';
+  }
+  return out;
+ }
  const headings=['Name','Location','Cognitive','Cyclomatic','Statements'];
  const rows=records.map(r=>[cell(r.name??'(anonymous)'),cell(`${r.file}:${r.start_line}:${r.start_column}`),String(r.metrics.cognitive_complexity),String(r.metrics.cyclomatic_complexity),String(r.metrics.statement_count)]);
  const widths=headings.map((heading,index)=>Math.max(3,heading.length,...rows.map(values=>values[index].length)));
@@ -51,9 +77,5 @@ export function markdown(report,records,sourceInfo,showExplain) {
  out+=row(headings);
  out+='| '+headings.map((_,index)=>index<2?'-'.repeat(widths[index]):'-'.repeat(widths[index]-1)+':').join(' | ')+' |\n';
  for(const values of rows) out+=row(values);
- if(showExplain) for(const r of records) {
-  out+=`\n## ${cell(r.name??'(anonymous)')} — ${cell(`${r.file}:${r.start_line}:${r.start_column}`)}\n\n`;
-  out+=explain(r,sourceInfo.get(r.file))+'\n';
- }
  return out;
 }
