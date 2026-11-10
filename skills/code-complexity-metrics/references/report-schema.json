@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Code Complexity Metrics report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "rules_version",
+    "analyzer_version",
+    "parser",
+    "summary",
+    "functions"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "rules_version": {
+      "type": "string"
+    },
+    "analyzer_version": {
+      "type": "string"
+    },
+    "parser": {
+      "type": "object",
+      "required": [
+        "package",
+        "version"
+      ],
+      "properties": {
+        "package": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "files",
+        "functions_found",
+        "functions_presented"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "All analyzed files before filtering."
+        },
+        "functions_found": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "All outer functions found before filtering."
+        },
+        "functions_presented": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Outer functions selected by the filter."
+        }
+      }
+    },
+    "functions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "location",
+          "name",
+          "metrics"
+        ],
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "File path, line, and column of the outer function."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metrics": {
+            "type": "object",
+            "required": [
+              "cognitive_complexity",
+              "statement_count",
+              "cyclomatic_complexity"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "cognitive_complexity": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "statement_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "cyclomatic_complexity": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -1,0 +1,2 @@
+# Preserve original formatting and bytes so manifest hashes survive checkouts.
+* -text -whitespace

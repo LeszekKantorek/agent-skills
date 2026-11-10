@@ -1,0 +1,26 @@
+{
+  "package": "@vscode/tree-sitter-wasm",
+  "version": "0.3.1",
+  "source": "https://github.com/microsoft/vscode-tree-sitter-wasm/tree/v0.3.1",
+  "runtime": "tree-sitter v0.25.10",
+  "javascript": "tree-sitter-javascript 0.25.0",
+  "rust": "tree-sitter-rust 261b20226c04ef601adbdf185a800512a5f66291",
+  "files": [
+    {
+      "file": "tree-sitter-javascript.wasm",
+      "sha256": "5fb488d0cabb4775a594bab85682de5ad6ce83c0d6ac997a9f82dd084d571240"
+    },
+    {
+      "file": "tree-sitter-rust.wasm",
+      "sha256": "0dac14947cb04d94466e3df659f80a4e264c216a60b3eda175eae4cf12ed7a8d"
+    },
+    {
+      "file": "tree-sitter.js",
+      "sha256": "874f4a37c4beddef04d8eb9a8dbd28a65b63111f2d2123a38fd3f5333ee046dd"
+    },
+    {
+      "file": "tree-sitter.wasm",
+      "sha256": "3a31af706ffdf4a7116b064cdd4988df6791823298615009fc5b6bccbd42909b"
+    }
+  ]
+}
