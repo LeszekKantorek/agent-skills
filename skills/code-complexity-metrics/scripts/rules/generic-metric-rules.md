@@ -1,8 +1,6 @@
 # Generic metric rules
 
-Rules version: **2.0** (target scoring specification).
-
-Implementation status: the bundled analyzer still reports `rules_version: "1.0"`. This documentation revision does not update the implementation or its tests. Its output is not evidence of conformance to version 2.0.
+Rules version: **2.0**.
 
 The shared rules and the relevant language document form one scoring profile:
 
@@ -19,7 +17,7 @@ The complete scoring profile has the following requirements:
 * A **nested function** is defined inside another function. Its code belongs to its enclosing outer, including through several nesting levels.
 * Nested methods follow the same ownership rule. Internal locations do not create separate or duplicate results.
 * Each scored operation contributes once per metric, regardless of reachability or execution count. One syntax construct can contain several operations. Nested bodies contribute even when uncalled.
-* Equivalent constructs and control-flow structures have the same scores across languages. This requirement also governs future adapters.
+* Equivalent constructs and control-flow structures have the same scores across languages. Each language analyzer applies this requirement to its syntax.
 * Syntax without an equivalent does not require an artificial counterpart. Arbitrary semantically equivalent programs need not have the same scores.
 * A complete metric is a nonnegative integer. An unavailable metric is `null`. Explain unsupported syntax separately from the numeric value; do not represent unknown contributions as zero.
 * The three metrics are independent; points in one metric do not change either of the others.
@@ -29,19 +27,43 @@ Table examples use pseudocode; `outer`, `select`, and `closure` denote language-
 
 ## Recursive composition
 
-An operation is a scored action or structural boundary. Language adapters identify operations, child roles, source locations, and function ownership from syntax. Metric rules then score that structure.
+An operation is a scored action or structural boundary. The term describes the meaning of a rule, not a required node type. The language analyzer applies these rules directly to Analyze AST nodes, using their syntax, child roles, and metric context.
 
-The operation structure is conceptual. These rules do not require a particular in-memory tree or a separate tree for each metric.
+### Analysis structure and responsibilities
+
+Tree-sitter parses the source with the language grammar. A registry selects the language analyzer once per file. That analyzer owns tree preparation and all three metric passes:
+
+1. Build Analyze AST, preserving parser node types, child fields, child order, relevant tokens, and original source locations.
+2. Complete syntax that requires additional parsing, such as Rust macro arguments. Finish the structure before scoring.
+3. Traverse recursively for Cognitive Complexity, writing only `score.cognitive`.
+4. Traverse recursively for Cyclomatic Complexity, writing only `score.cyclomatic`.
+5. Traverse recursively for Statement Count, writing only `score.statements`.
+
+Each node starts with `score: { cognitive: 0, cyclomatic: 0, statements: 0 }`. This field contains only that node's local contributions. A node can represent several scored actions; a single action represented by multiple parser nodes contributes only once.
+
+The three passes use their own contexts and leave the prepared tree structure intact. Cognitive carries nesting depth and logical-sequence state. Statements tracks result positions, block roles, and expression boundaries. Cyclomatic identifies decisions and assigns the outer base exactly once, without additional bases for nested functions.
+
+Rust and JavaScript implement these passes within their respective analyzers. Shared rules define score meanings; they do not require a shared scoring algorithm or a normalized operation tree. Shared helpers or abstractions serve only mechanisms that are identical across languages. Scoring code does not dispatch through `if rust / else javascript` branches.
+
+The analyzer returns the tree, reported functions, node ownership, and diagnostics. Ownership and diagnostics are stored separately from tree nodes. Nodes retain parser locations for reports and `--explain`, without a duplicate `sourceRange`. They store no `subtreeScore`, `analyzed`, or `ownScore` fields.
+
+Aggregation recursively sums local `score` values according to node ownership. It does not interpret syntax, add another Cyclomatic base, or store subtree totals in the tree. JSON, CSV, Markdown, and `--explain` use these contributions and the original source locations.
+
+Source indices and columns count UTF-16 code units. Internal rows and columns are zero-based; range ends are exclusive. Reports use one-based rows and columns. A tab occupies one code unit, and a character outside the BMP occupies two. CRLF occupies two index units and ends one row.
+
+The analyzer assigns a construct's contribution to the node identified by its scoring rule. Operator contributions belong to operator tokens, the Cyclomatic base to the outer node, and implicit-result contributions to result expressions. The same contribution is never assigned to both a node and its descendant.
+
+`--explain` places each node's local score on its original start row. Contributions with the same outer and start row are added together. A multiline call chain can therefore place several call points on the row where the receiver begins. Do not move call points to method identifiers for presentation. Aggregators and renderers use the assigned nodes and locations without interpreting syntax or relocating contributions. Recovered macro arguments follow the same convention after mapping their positions to the original source.
 
 ### Apply rules to arbitrary nesting
 
-1. Map each recognized construct to its operations and children. Preserve roles such as condition, body, argument, receiver, initializer, and branch result.
-2. Determine the construct's own contribution for each metric. A contribution of zero does not suppress its children.
+1. Interpret each recognized node using its type, parent, child field, and context. Preserve roles such as condition, body, argument, receiver, initializer, and branch result.
+2. Determine the node's local contribution in the relevant metric pass. A contribution of zero does not suppress its children.
 3. Visit every included child recursively, using the context defined for that role. Apply the same rules at every nesting level.
-4. Aggregate contributions into the owning outer. Add the Cyclomatic outer base exactly once.
+4. After scoring, aggregate contributions into the owning outer. The Cyclomatic pass has already assigned the outer base exactly once.
 5. Produce totals and source explanations from the same contributions. Formatting or flattening the structure must not change the score.
 
-For additive contributions, the subtree score is its own contribution plus its children's scores. Cognitive also carries nesting depth and logical-sequence state. Sequence points follow the logical-sequence rules rather than adding one point for every logical-expression node.
+Recursive aggregation adds each node's local contribution and then visits its children. Context determines local contributions during scoring, before aggregation. Cognitive sequence points follow the logical-sequence rules rather than adding one point for every logical-expression node.
 
 Context is scoped to the relevant child. Restore the enclosing context after visiting that child. Calls do not increase Cognitive depth or interrupt traversal of their receivers and arguments.
 
@@ -64,7 +86,7 @@ Explicitly excluded syntax is outside the profile's measurement scope. Unsupport
 
 When unsupported syntax can affect a metric, that metric is unavailable for the owning outer. Other metrics remain available only if their contributions can be established independently. Identify the source span and unsupported category in diagnostic output; a partial sum is not a complete score.
 
-The current report format and analyzer do not implement this coverage requirement. Their version 1.0 behavior must not be described as version 2.0 conformance.
+The analyzer records unsupported syntax in diagnostics separately from numeric node scores. Initial zero values do not establish completeness. Aggregation uses diagnostics to mark affected metrics as `null` while retaining known local contributions for explanation.
 
 ## Cyclomatic Complexity
 

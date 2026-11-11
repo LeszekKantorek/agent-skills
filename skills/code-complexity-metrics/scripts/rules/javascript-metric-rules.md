@@ -1,10 +1,14 @@
 # JavaScript metric rules
 
-Rules version: **2.0** (target scoring specification; implementation remains at 1.0).
+Rules version: **2.0**.
 
 The [generic metric rules](generic-metric-rules.md) define shared scoring, ownership, and table notation. This document specifies JavaScript syntax mappings and exceptions.
 
 Apply the shared [recursive composition rules](generic-metric-rules.md#recursive-composition) at arbitrary nesting depth. These mappings classify syntax wherever it occurs; examples do not define a whitelist of combinations.
+
+The JavaScript analyzer builds Analyze AST from the JavaScript parser tree, preserving node types, child roles, relevant tokens, and original source locations. Separate recursive passes assign local Cognitive, Cyclomatic, and Statements contributions to their respective `score` fields under the shared [analysis contract](generic-metric-rules.md#analysis-structure-and-responsibilities).
+
+The JavaScript analyzer determines function ownership and records diagnostics. Shared aggregation sums the assigned scores without interpreting JavaScript syntax.
 
 Calls and constructor calls include their receivers, computed targets, and argument expressions. Apply ordinary rules recursively to those children, including nested calls, selections, and function values. A call contributes no Cognitive depth. Nested functions establish their own depth and result contexts under the shared rules.
 
