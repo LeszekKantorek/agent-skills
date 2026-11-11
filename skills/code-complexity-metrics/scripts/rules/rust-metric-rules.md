@@ -1,8 +1,10 @@
 # Rust metric rules
 
-Rules version: **1.0** (`rules_version` in reports).
+Rules version: **2.0** (target scoring specification; implementation remains at 1.0).
 
 The [generic metric rules](generic-metric-rules.md) define shared scoring, ownership, and table notation. This document specifies Rust syntax mappings and exceptions.
+
+Apply the shared [recursive composition rules](generic-metric-rules.md#recursive-composition) to every recognized Rust construct. Syntax mappings apply in all expression positions and at arbitrary nesting depth. Examples do not limit supported combinations.
 
 Rust function syntax has the following mappings:
 
@@ -33,7 +35,7 @@ Rust-specific decision increments and exclusions are defined below:
 | Macro invocation | A macro invocation adds no decision. | `println!()`<br>`vec![]`<br>`tokio::select! {}` | 0 |
 | Macro definition | A macro definition adds no decision. | `macro_rules! answer { () => { 42 }; }` | 0 |
 
-Macro token trees follow the [macro exclusion requirements](#macro-definitions-and-invocations).
+Macro arguments follow the [macro composition requirements](#macro-definitions-and-invocations). Zero points for the invocation itself do not exclude decisions in its arguments.
 
 Examples:
 
@@ -81,6 +83,8 @@ The [Rust construct mappings](#decisions) identify loops and selections for the 
 
 Labeled jumps use `break 'label` or `continue 'label`.
 
+Macro invocations preserve the enclosing Cognitive depth. Analyze their arguments recursively, including decisions, logical sequences, and nested functions. Macro definition templates remain excluded as specified in the [macro rules](#macro-definitions-and-invocations).
+
 Rust-specific exclusions and reference totals are defined below:
 
 | Rule | Description | Example | Point |
@@ -98,7 +102,7 @@ Rust-specific exclusions and reference totals are defined below:
 
 ### Tail values
 
-A Rust tail expression is an implicit return under the [generic returned-value rules](generic-metric-rules.md#implicit-returns-and-selections).
+A Rust tail expression supplies a result under the [generic returned-value rules](generic-metric-rules.md#implicit-returns-and-selections). In a function body, that result is an implicit function return. In a block or value-producing branch, it is a block or branch result. Forwarding the result through enclosing blocks or selections adds no duplicate result point.
 
 Complete tail-expression scores are shown below:
 
@@ -282,17 +286,56 @@ Rust macro increments and complete fragment scores are defined below:
 | --- | --- | --- | ---: |
 | Macro invocation | Each invocation contributes one call point, regardless of delimiters or name. | `println!()`<br>`vec![]`<br>`tokio::select! {}` | +1 |
 | Macro definition | Each definition inside an outer contributes one definition point, even when unused; it is not a call. | `fn f() { macro_rules! answer { () => { 42 }; } }` | +1 |
-| Macro contents | Invocation and definition contents contribute no points to any metric. | `work!(if ready { call(); });` | 0 |
+| Macro arguments | Recognized argument operations contribute recursively under the ordinary rules for all three metrics. | `work!(load());` | Statements +1 for the contained call, in addition to the invocation |
+| Definition template | Definition patterns and templates are excluded from all three metrics. | `macro_rules! answer { () => { 42 }; }` | 0 contents points |
 | Declaration-and-macro total | A declarator initialized by a macro invocation | `let x = vec![];` | 2 |
 | Return-and-macro total | An explicit return containing a macro invocation | `return vec![];` | 2 |
 | Definition-and-call total | One local definition and one invocation | `fn f() { macro_rules! answer { () => { 42 }; } answer!(); }` | 2 |
 
-Macro exclusion requirements govern all three metrics:
+Macro composition requirements govern all three metrics:
 
-* Macros are not expanded. Token trees are opaque, including blocks, calls, decisions, functions, closures, and semicolons written inside them.
-* Excluding definition contents takes precedence over rules for the constructs inside them. Arms and template contents do not affect the definition's score.
-* The parser's `macro_invocation` node represents an invocation; its `token_tree` contents are excluded.
-* A macro alone does not make a metric `null`.
+* Each invocation is a call operation. Its own contribution is Statements +1, Cognitive 0, and Cyclomatic 0.
+* Analyze written argument expressions recursively. Include calls in receivers, chains, arguments, and nested macro invocations. No macro-specific scoring rule is needed for these combinations.
+* Apply ordinary rules to other recognized argument constructs, including blocks, selections, logical expressions, and closures. Macro arguments have ordinary argument context, not implicit-return context.
+* An invocation does not increase Cognitive depth. Separate arguments form separate logical sequences. Constructs inside each argument retain their own nesting and sequence rules.
+* Do not expand macros or count operations generated by expansion. Count written argument operations once, even when expansion would duplicate, omit, or conditionally evaluate them.
+* Definition patterns and templates remain excluded. They describe expansion syntax rather than invocation arguments. Count a local definition point without traversing that definition's contents.
+* A parser `token_tree` is a representation boundary, not a scoring exclusion. The adapter must recover the argument structure and preserve original source locations before applying shared metric rules.
+
+Argument recognition follows syntax, not an enumeration of macro names or call combinations:
+
+* Empty contents have no argument operations. A complete Rust expression, or a complete comma-separated expression list with an optional trailing comma, supplies ordinary arguments.
+* Recognize each whole argument recursively, including nested macros. Use parsed fragment boundaries rather than splitting text at every comma.
+* Invocation delimiters, grouping parentheses, and argument separators add no operations. An actual block expression inside the argument list follows the ordinary block rules. All invocation delimiter forms follow the same principle.
+* Other macro input grammars require a syntax mapping to ordinary operations and child roles. For example, a repetition form can map its value and count expressions as children. Such a mapping defines structure, not a separate metric formula.
+* Do not infer calls by searching token text for identifiers followed by parentheses. Patterns, quoted templates, and custom macro languages can resemble executable expressions.
+* When the input cannot be classified completely, apply the shared coverage rules. Preserve the known invocation contribution for explanation, but do not publish a partial sum as a complete metric.
+
+A recognized macro invocation alone does not make a metric unavailable. Unsupported argument syntax can make affected metrics unavailable; it must not silently contribute zero.
+
+Derived examples demonstrate composition rather than additional rules:
+
+```rust
+fn check(value: f64) {
+    assert_eq!(TrueAirspeed::new(value).unwrap().knots(), value);
+    // Statements: +4 = macro + new + unwrap + knots
+}
+// Statements: 4; Cognitive: 0; Cyclomatic: 1 (outer base)
+
+fn nested() {
+    outer!(inner!(load()));
+    // Statements: +3 = outer macro + inner macro + load
+}
+// Statements: 3; Cognitive: 0; Cyclomatic: 1 (outer base)
+
+fn condition(ready: bool) {
+    assert!(ready && verify());
+    // Statements: +2 = macro + verify; Cognitive: +1 and Cyclomatic: +1 for &&
+}
+// Statements: 2; Cognitive: 1; Cyclomatic: 2 (including outer base)
+```
+
+These are syntax-scoring examples; macro definitions and type checking are not required for the illustrated argument forms.
 
 Example:
 

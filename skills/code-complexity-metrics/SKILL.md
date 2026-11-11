@@ -5,6 +5,14 @@ description: Measure Cognitive Complexity, Cyclomatic Complexity, and Statement 
 
 # Code Complexity Metrics
 
+## Scoring specification and implementation status
+
+The [generic metric rules](scripts/rules/generic-metric-rules.md) define the target version 2.0 profile and recursive composition. Read them with the [Rust mappings](scripts/rules/rust-metric-rules.md) or [JavaScript mappings](scripts/rules/javascript-metric-rules.md) when interpreting or changing scoring rules.
+
+The bundled analyzer and tests still implement version 1.0. In particular, the analyzer omits Rust macro arguments; version 2.0 requires their recognized operations to contribute recursively. Version 2.0 also requires diagnostics for unsupported syntax. These documentation changes do not update executable code or the report schema.
+
+Use the version recorded in a report when describing measured behavior. Do not claim version 2.0 conformance for current output. Derive new combinations from shared rules; request a new rule only for a genuine classification gap or conflict.
+
 ## Usage
 
 * Replace `<skill-dir>` with the absolute path to this skill's directory.

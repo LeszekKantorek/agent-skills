@@ -1,6 +1,8 @@
 # Generic metric rules
 
-Rules version: **1.0** (`rules_version` in reports).
+Rules version: **2.0** (target scoring specification).
+
+Implementation status: the bundled analyzer still reports `rules_version: "1.0"`. This documentation revision does not update the implementation or its tests. Its output is not evidence of conformance to version 2.0.
 
 The shared rules and the relevant language document form one scoring profile:
 
@@ -9,21 +11,60 @@ The shared rules and the relevant language document form one scoring profile:
 
 The complete scoring profile has the following requirements:
 
-* This profile defines scoring and test expectations. Gaps must be resolved before affected constructs are implemented.
+* This profile defines scoring and test expectations. Derive combinations of recognized constructs using the recursive composition rules below.
 * Measurements use written syntax, without resolving types or counting executed paths.
 * Rules are versioned independently of the parser. Parser updates do not change the scoring rules.
 * An **outer** is a function without an enclosing function. Only outers receive report records and contribute to reported function counts.
 * Module-level functions, methods, anonymous functions, and closures outside another function can be outers. Visibility and exports do not determine ownership.
 * A **nested function** is defined inside another function. Its code belongs to its enclosing outer, including through several nesting levels.
 * Nested methods follow the same ownership rule. Internal locations do not create separate or duplicate results.
-* Each written construct contributes once, regardless of reachability or execution count. Nested bodies contribute even when uncalled.
+* Each scored operation contributes once per metric, regardless of reachability or execution count. One syntax construct can contain several operations. Nested bodies contribute even when uncalled.
 * Equivalent constructs and control-flow structures have the same scores across languages. This requirement also governs future adapters.
 * Syntax without an equivalent does not require an artificial counterpart. Arbitrary semantically equivalent programs need not have the same scores.
-* A valid metric is a nonnegative integer. An unavailable metric is represented only by `null`, without a reason or metric status.
+* A complete metric is a nonnegative integer. An unavailable metric is `null`. Explain unsupported syntax separately from the numeric value; do not represent unknown contributions as zero.
 * The three metrics are independent; points in one metric do not change either of the others.
 * Reference totals are expectations derived from the rules, not a test execution report.
 
 Table examples use pseudocode; `outer`, `select`, and `closure` denote language-independent constructs. Points describe only the named construct unless the rule specifies a total. Language documents map syntax to these rules and define exceptions.
+
+## Recursive composition
+
+An operation is a scored action or structural boundary. Language adapters identify operations, child roles, source locations, and function ownership from syntax. Metric rules then score that structure.
+
+The operation structure is conceptual. These rules do not require a particular in-memory tree or a separate tree for each metric.
+
+### Apply rules to arbitrary nesting
+
+1. Map each recognized construct to its operations and children. Preserve roles such as condition, body, argument, receiver, initializer, and branch result.
+2. Determine the construct's own contribution for each metric. A contribution of zero does not suppress its children.
+3. Visit every included child recursively, using the context defined for that role. Apply the same rules at every nesting level.
+4. Aggregate contributions into the owning outer. Add the Cyclomatic outer base exactly once.
+5. Produce totals and source explanations from the same contributions. Formatting or flattening the structure must not change the score.
+
+For additive contributions, the subtree score is its own contribution plus its children's scores. Cognitive also carries nesting depth and logical-sequence state. Sequence points follow the logical-sequence rules rather than adding one point for every logical-expression node.
+
+Context is scoped to the relevant child. Restore the enclosing context after visiting that child. Calls do not increase Cognitive depth or interrupt traversal of their receivers and arguments.
+
+Count operations rather than parser wrappers. A returned call contains a call operation and a return operation. Parentheses, expression wrappers, or multiple syntax nodes representing one operation do not duplicate its contribution.
+
+Nested function bodies contribute through their written definitions. A call never traverses the target function's body. Apply ownership and nesting rules even when a function appears inside an argument or initializer.
+
+### Resolve overlap and genuine gaps
+
+* Apply the shared rule after mapping language syntax. A language exception overrides only the contribution or traversal boundary it explicitly names.
+* A rule assigning zero to a construct changes its own contribution only. Excluding descendants requires an explicit exclusion rule.
+* Combine distinct operations. Apply replacement rules, such as expression-wrapper suppression or explicit-return replacement, only within their stated context.
+* A new arrangement of recognized operations is not a specification gap. Derive its score without requesting a combination-specific rule.
+* A gap exists when an operation, child role, or overlap cannot be classified, or when applicable rules conflict. Resolve that gap at the smallest reusable category.
+* Examples illustrate derived results and are not a whitelist of supported arrangements. A conflicting example must be corrected against the normative rules.
+
+### Coverage and exclusions
+
+Explicitly excluded syntax is outside the profile's measurement scope. Unsupported syntax is within that scope but cannot yet be classified. These cases are distinct from a recognized operation with zero contribution.
+
+When unsupported syntax can affect a metric, that metric is unavailable for the owning outer. Other metrics remain available only if their contributions can be established independently. Identify the source span and unsupported category in diagnostic output; a partial sum is not a complete score.
+
+The current report format and analyzer do not implement this coverage requirement. Their version 1.0 behavior must not be described as version 2.0 conformance.
 
 ## Cyclomatic Complexity
 
@@ -183,7 +224,7 @@ Returned-value and selection increments:
 | --- | --- | --- | ---: |
 | Implicit return | Each implicit return contributes one point. | `outer f { value }` | +1 |
 | Selection | A value-producing selection contributes an increment. | `if condition { first() } else { second() }` | +1 |
-| Implicit return | Each branch's implicit return contributes separately from contained calls. | `if condition { value } else { other }` | +1 per branch value |
+| Branch result | Each value-producing branch contributes one result point, separately from contained calls. | `if condition { value } else { other }` | +1 per branch value |
 | Branch label | Branch labels add no points. | `else {}` | 0 |
 | Selection | The whole selection result adds no second implicit return. | `outer f { if a { 1 } else { 2 } }` | 0 additional |
 | Selection | Passing the selection result into its declarator adds no further point. | `let x = if a { 1 } else { 2 };` | 0 additional |
@@ -195,6 +236,12 @@ Selection-value requirements:
 * The same rules govern nested selections recursively. A complete selection is not another returned value.
 * The enclosing declarator contributes separately when the selection initializes a variable.
 * Applicable syntax and examples are defined by the [Rust selection rules](rust-metric-rules.md#trailing-selections-in-rust) and [JavaScript conditional rule](javascript-metric-rules.md#conditional-operator-in-javascript).
+
+A branch result or block result transfers a value to its enclosing expression. An implicit function return transfers a value from a function. The scoring convention gives each result boundary one point, but forwarding the same result through enclosing blocks or selections adds no duplicate point.
+
+Propagate result context through parentheses and result-producing blocks or selections. Charge the point at the terminal value expression. A nested selection delegates to its result branches; an explicit return replaces the implicit result at that position. Calls within any result expression still contribute separately.
+
+Ordinary arguments and initializer expressions do not acquire return points merely because they produce values. Result points arise from the function, block, or selection rules. A call inside such a context retains ordinary argument contexts for its own arguments.
 
 ### Nested functions
 
@@ -248,6 +295,12 @@ Interpretation requirements:
 
 * Empty-statement classification follows the parser rather than individual semicolon tokens.
 * Statement Count is the project convention defined here. It does not simply count nodes named `statement`.
+
+An expression-statement wrapper is a fallback point. Add it only when its expression has no counted call, assignment, update, control operation, or block operation in the same expression context. Search recursively through ordinary operands, receivers, and arguments. Parentheses preserve the context.
+
+A nested function body, block body, or separate statement or declarator starts a different expression context. Operations inside that context do not suppress the enclosing wrapper. A counted block or selection itself can suppress the wrapper without inspecting its body. Returned-value contexts use the result rules instead of this fallback.
+
+Thus `1 + save();` has one call point and no wrapper point. The same rule applies at any operand depth; no separate rule is needed for each enclosing operator.
 
 ### Reference totals
 

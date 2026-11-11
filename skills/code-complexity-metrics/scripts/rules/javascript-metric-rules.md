@@ -1,8 +1,12 @@
 # JavaScript metric rules
 
-Rules version: **1.0** (`rules_version` in reports).
+Rules version: **2.0** (target scoring specification; implementation remains at 1.0).
 
 The [generic metric rules](generic-metric-rules.md) define shared scoring, ownership, and table notation. This document specifies JavaScript syntax mappings and exceptions.
+
+Apply the shared [recursive composition rules](generic-metric-rules.md#recursive-composition) at arbitrary nesting depth. These mappings classify syntax wherever it occurs; examples do not define a whitelist of combinations.
+
+Calls and constructor calls include their receivers, computed targets, and argument expressions. Apply ordinary rules recursively to those children, including nested calls, selections, and function values. A call contributes no Cognitive depth. Nested functions establish their own depth and result contexts under the shared rules.
 
 Function declarations, function expressions, methods, and arrow functions are functions under the generic ownership rules.
 
@@ -139,6 +143,8 @@ Complete scores for these forms are shown below:
 ### Conditional operator in JavaScript
 
 The ternary operator `?:` is a value-producing selection under the generic returned-value rules.
+
+Each result branch supplies a branch-result point, independently of contained calls. A nested selection delegates result scoring to its branches. An enclosing expression-bodied arrow does not add another implicit-return point for the same selection result. These rules also apply when a ternary occurs in an argument, condition, assignment, or larger expression.
 
 Complete initializer scores are shown below:
 
