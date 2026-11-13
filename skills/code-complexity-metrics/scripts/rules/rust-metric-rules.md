@@ -17,6 +17,21 @@ Rust function syntax has the following mappings:
 * Macro invocations and definitions do not create function records.
 * Rust `cfg` attributes do not filter the source.
 
+### Refutable declaration with a failure body
+
+`let pattern = initializer else { body };` combines one declarator and one
+conditional operation. Assign the declarator and control contributions to
+`let_declaration`: Statements 2, Cognitive `1 + depth`, Cyclomatic 1. The
+pattern and `else` add no separate point. The initializer is a header at the
+incoming depth; the failure block is a direct branch at depth + 1 and has no
+extra-block point. It does not transfer a result to the declaration, so its
+terminal expression receives no branch-result point from this body. Recurse
+into both children normally, including calls, nested selections, explicit
+returns and additional blocks; those constructions retain their own rules.
+This mapping is a decision made on 2026-11-11 for a declaration with a written
+failure path. It does not turn ordinary `let` into a decision or add a second
+decision to `if let`, `while let`, a match guard or a macro invocation.
+
 ## Cyclomatic Complexity
 
 ### Decisions
@@ -352,3 +367,7 @@ fn outer() {
 }
 // Statements: 2; Cognitive: 0; Cyclomatic: 1 (outer base)
 ```
+
+### Delegated suspension mapping
+
+A written `yield_expression` is an explicit suspension with later resumption and contributes Statements 1 on that node. Its operand remains separately analyzed, and it creates no implicit call or additional Cognitive or Cyclomatic decision. This applies to syntax accepted by the pinned parser; the metric does not assert that an arbitrary containing program type-checks or compiles.

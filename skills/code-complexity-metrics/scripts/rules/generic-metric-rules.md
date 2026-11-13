@@ -90,6 +90,15 @@ The analyzer records unsupported syntax in diagnostics separately from numeric n
 
 ## Cyclomatic Complexity
 
+A written construct can combine a declarator with an explicit conditional
+failure path. Classify its binding and its control operation separately: one
+declarator and one conditional operation, not one decision per bound name. The
+initializer is a header expression, and the failure body is a direct branch.
+The clause naming that branch adds no second operation. A branch that does not
+transfer a value to its enclosing construct has no branch-result point merely
+because it ends in an expression; operations within it remain measurable.
+Language profiles identify which syntax has these roles.
+
 ### Base and decisions
 
 Decision increments:
@@ -177,11 +186,15 @@ Nesting follows these requirements:
 
 ### Logical sequences
 
+A logical sequence consists of connected AND/OR operators in the syntax tree. Grouping parentheses preserve the connection. Operators outside the sequence separate the sequences in their operands. Analyze those operands recursively under their own contexts.
+
+Process the operators in a sequence in source order. Visiting a separate context, such as a call argument, preserves the enclosing sequence's state.
+
 Logical-sequence increments without nesting cost:
 
 | Rule | Description | Example | Point |
 | --- | --- | --- | ---: |
-| Logical sequence | The first AND/OR sequence in an expression contributes an increment. | `a && b` | +1 |
+| Logical sequence | The first operator of each AND/OR sequence contributes an increment. | `a && b` | +1 |
 | Operator | Each change of operator contributes an increment. | `a && b \|\| c` | +1 per change |
 | Operator | Repeating the same operator adds no further points. | `a && b && c` | 0 additional |
 | Grouping parentheses | Grouping parentheses neither add points nor break a sequence. | `(a && b)` | 0 |
@@ -218,6 +231,8 @@ Complete Cognitive scores:
 ## Statement Count
 
 ### Calls, declarators, and assignments
+
+A declarator introduces a variable, a constant, or a field that stores a value. The initializer is optional and has its own expression context. Analyze its operations recursively. The initializer syntax does not itself contribute an assignment point.
 
 Explicit-operation increments:
 
@@ -350,3 +365,11 @@ Complete Statement Count scores:
 | Empty extra-block total | Outer containing one extra empty block | `outer f { {} }` | 1 |
 | Constant-selection total | Selection with two constant branch values | `if a { 1 } else { 2 }` | 3 |
 | Constant-selection initializer total | Declarator initialized by that selection | `let x = if a { 1 } else { 2 };` | 4 |
+
+### Delegated clarifications: suspension, environment, and debugging
+
+The following are delegated specification decisions, not consequences of the earlier examples. Count each written explicit suspension that transfers control and a yielded value to a consuming caller in a generator protocol and permits later resumption as one Statements operation, whether it is an expression or a statement. Its operand is analyzed normally; resumption, delegation protocols, and implicit calls add no operations. An expression-statement wrapper is suppressed by this operation in the same expression context. A suspension is not an explicit return or a decision.
+
+Count an explicit statement that establishes a temporary name-resolution environment for its direct body as one Statements operation. Its header and body are analyzed separately, and a direct body block adds no extra block point. This role does not by itself increase Cognitive depth or add a Cyclomatic decision. Do not infer this role merely from an arbitrary block.
+
+Count each explicit debugger command as one Statements operation, independent of whether a debugger is attached. It is not a call, a decision, or an empty statement; its terminator adds no point. These are three distinct categories and do not classify other operations merely by their AST names.

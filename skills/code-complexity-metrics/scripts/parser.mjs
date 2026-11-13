@@ -8,7 +8,12 @@ export async function parse(source, language) {
   if (!['rust', 'javascript'].includes(language)) throw new Error('Unsupported language');
   if (!languages.has(language)) languages.set(language, await ts.Language.load(path.join(dir, `tree-sitter-${language}.wasm`)));
   const parser = new ts.Parser();
-  parser.setLanguage(languages.get(language));
-  const tree = parser.parse(source);
-  return { tree, dispose() { tree.delete(); parser.delete(); } };
+  try {
+    parser.setLanguage(languages.get(language));
+    const tree = parser.parse(source);
+    return { tree, dispose() { try { tree.delete(); } finally { parser.delete(); } } };
+  } catch (error) {
+    parser.delete();
+    throw error;
+  }
 }

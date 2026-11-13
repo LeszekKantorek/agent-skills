@@ -16,7 +16,12 @@ function segmentExpression(segment) {
   return new RegExp(source + '$');
 }
 
-export async function inputFiles(patterns, cwd = process.cwd()) {
+export async function inputFiles(patterns, cwd = process.cwd(), errors = []) {
+  const recordError = (file, error) => {
+    if (!errors.some(e => e.file === file && e.code === error.code && e.message === error.message)) {
+      errors.push({file, code: error.code, message: error.message});
+    }
+  };
   const files = new Set();
   patterns = patterns.flatMap(function expand(pattern) {
     const match = /\{([^{}]*,[^{}]*)\}/.exec(pattern);
@@ -29,35 +34,35 @@ export async function inputFiles(patterns, cwd = process.cwd()) {
     const parts = absolute.slice(root.length).split(path.sep);
     async function walk(dir, index, ancestors) {
       if (index === parts.length) {
-        try { if ((await stat(dir)).isFile()) files.add(path.resolve(dir)); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) throw e; }
+        try { if ((await stat(dir)).isFile()) files.add(path.resolve(dir)); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) recordError(dir, e); }
         return;
       }
       const part = parts[index];
       if (part === '**') {
         await walk(dir, index + 1, ancestors);
         let entries;
-        try { entries = await readdir(dir, { withFileTypes: true }); } catch (e) { if (['ENOENT', 'ENOTDIR'].includes(e.code)) return; throw e; }
+        try { entries = await readdir(dir, { withFileTypes: true }); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) recordError(dir, e); return; }
         let identity;
-        try { identity = await realpath(dir); } catch (e) { if (['ENOENT', 'ENOTDIR'].includes(e.code)) return; throw e; }
+        try { identity = await realpath(dir); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) recordError(dir, e); return; }
         if (ancestors.has(identity)) return;
         const next = new Set(ancestors); next.add(identity);
         for (const entry of entries) {
           const child = path.join(dir, entry.name);
           let directory = entry.isDirectory();
           if (entry.isSymbolicLink()) {
-            try { directory = (await stat(child)).isDirectory(); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) throw e; }
+            try { directory = (await stat(child)).isDirectory(); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) recordError(child, e); continue; }
           }
           if (directory) await walk(child, index, next);
           else if (index === parts.length - 1) await walk(child, index + 1, next);
         }
       } else if (/[?*\[]/.test(part)) {
         let entries;
-        try { entries = await readdir(dir, { withFileTypes: true }); } catch (e) { if (['ENOENT', 'ENOTDIR'].includes(e.code)) return; throw e; }
+        try { entries = await readdir(dir, { withFileTypes: true }); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) recordError(dir, e); return; }
         const match = segmentExpression(part);
         for (const entry of entries) if (match.test(entry.name)) await walk(path.join(dir, entry.name), index + 1, ancestors);
       } else await walk(path.join(dir, part), index + 1, ancestors);
     }
-    await walk(root, 0, new Set());
+    try { await walk(root, 0, new Set()); } catch (error) { recordError(absolute, error); }
   }
   const sorted=[...files].sort((a, b) => { const x = a.replaceAll('\\', '/'), y = b.replaceAll('\\', '/'); return x < y ? -1 : x > y ? 1 : 0; });
   const seen=new Map(), result=[];

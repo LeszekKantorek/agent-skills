@@ -1,72 +1,111 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, open, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { inputFiles, languageFor } from './input-files.mjs';
 import { parse } from './parser.mjs';
-import { outerFunctions, functionName } from './ir.mjs';
-import { cognitiveEvents } from './metrics/cognitive.mjs';
-import { cyclomaticEvents } from './metrics/cyclomatic.mjs';
-import { statementEvents } from './metrics/statements.mjs';
-import { markdown, csv } from './report.mjs';
+import { analyzerFor } from './analyzers/registry.mjs';
+import { aggregate } from './aggregation.mjs';
+import { makeReport, markdown, csv, diagnosticText } from './public-report.mjs';
 
 function argumentsOf(args) {
- const result={ paths:[], format:'json', explain:false };
- for(let i=0;i<args.length;i++) {
-  const key=args[i];
-  if(key==='--explain') {result.explain=true;continue}
-  if(!['--path','--format','--output','--filter'].includes(key) || i+1===args.length || args[i+1].startsWith('--')) throw new Error('Invalid arguments');
-  const value=args[++i];
-  if(key==='--path') result.paths.push(value); else result[key.slice(2)]=value;
- }
- if(!['json','markdown','csv'].includes(result.format)) throw new Error('Invalid format');
- return result;
+  const options = { paths: [], format: 'json', explain: false };
+  for (let i = 0; i < args.length; i++) {
+    const key = args[i];
+    if (key === '--explain') { options.explain = true; continue; }
+    if (!['--path', '--format', '--output', '--filter'].includes(key) || i + 1 === args.length || args[i + 1].startsWith('--')) throw Error('Invalid arguments');
+    const value = args[++i];
+    if (key === '--path') options.paths.push(value);
+    else options[key.slice(2)] = value;
+  }
+  if (!['json', 'markdown', 'csv'].includes(options.format)) throw Error('Invalid format');
+  return options;
 }
-function walk(node, fn) { fn(node); for(const c of node.namedChildren) walk(c,fn); }
-function displayPath(file) { return path.relative(process.cwd(),file).replaceAll('\\','/') || path.basename(file); }
-async function main() {
- const options=argumentsOf(process.argv.slice(2));
- const files=(await inputFiles(options.paths)).sort((a,b)=>{const x=displayPath(a),y=displayPath(b);return x<y?-1:x>y?1:0});
- let error=false;
- const records=[], sourceInfo=new Map();
- for(const file of files) {
-  const language=languageFor(file), name=displayPath(file);
-  if(!language) {error=true;continue}
-  let parsed;
-  try {
-   const bytes=await readFile(file);
-   const source=bytes.toString('utf8');
-   parsed=await parse(source,language);
-   if(parsed.tree.rootNode.hasError) {error=true;continue}
-   const comments=[], literals=[];
-   walk(parsed.tree.rootNode,n=>{
-    if(n.type==='comment'||n.type.endsWith('_comment')) comments.push([n.startIndex,n.endIndex]);
-    if(n.endPosition.row>n.startPosition.row && ['string','string_literal','raw_string_literal','template_string','regex'].includes(n.type)) literals.push([n.startPosition.row,n.endPosition.row,n.startIndex,n.endIndex]);
-   });
-   const fileRecords=[];
-   for(const fn of outerFunctions(parsed.tree.rootNode)) {
-    const metrics={cognitive_complexity:null,statement_count:null,cyclomatic_complexity:null};
-    const events=[];
-    for(const [key,measure] of [
-     ['cognitive_complexity',()=>cognitiveEvents(fn)],
-     ['cyclomatic_complexity',()=>cyclomaticEvents(fn)],
-     ['statement_count',()=>statementEvents(fn,language)],
-    ]) {
-     try { const increments=measure(); events.push(...increments); metrics[key]=increments.reduce((total,event)=>total+event.amount,0); }
-     catch {error=true}
+const diagnostic = (code, category, message, fileId = null) => ({ code, category, message: String(message), fileId, range: null, owner: null, affectedMetrics: [], affectsFunctionDiscovery: true });
+const normalized = file => {
+  const absolute = path.resolve(file);
+  return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+};
+
+// Resolve all existing ancestors before creating a destination. This covers a
+// missing input reached through a symlink to its directory, without touching it.
+async function prospectivePath(file) {
+  let current = path.resolve(file);
+  const suffix = [];
+  for (;;) {
+    try { return normalized(path.join(await realpath(current), ...suffix)); }
+    catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+      const parent = path.dirname(current);
+      if (parent === current) throw error;
+      suffix.unshift(path.basename(current));
+      current = parent;
     }
-    const start_line=fn.startPosition.row+1,start_column=fn.startPosition.column+1;
-    fileRecords.push({id:`${name}:${start_line}:${start_column}`,name:functionName(fn),language,file:name,start_line,start_column,end_line:fn.endPosition.row+1,metrics,events,startIndex:fn.startIndex,endIndex:fn.endIndex});
-   }
-   sourceInfo.set(name,{source,comments,literals,sha256:createHash('sha256').update(bytes).digest('hex')});
-   records.push(...fileRecords);
-  } catch {error=true} finally {parsed?.dispose()}
- }
- const found=records.length;
- const prefixes=options.filter===undefined?null:options.filter.split('|');
- const selected=records.filter(r=>!prefixes || r.name!==null && prefixes.some(prefix=>r.name.startsWith(prefix)));
- const report={schema_version:'1.2',rules_version:'1.0',analyzer_version:'0.1.0',parser:{package:'@vscode/tree-sitter-wasm',version:'0.3.1'},summary:{files:files.length,functions_found:found,functions_presented:selected.length},functions:selected.map(({id,name,metrics})=>({location:id,name,metrics}))};
- const output=options.explain || options.format==='markdown' ? markdown(report,selected,sourceInfo,options.explain) : options.format==='csv' ? csv(report,selected) : JSON.stringify(report,null,2)+'\n';
- if(options.output) await writeFile(options.output,output); else process.stdout.write(output);
- if(error) process.exitCode=1;
+  }
 }
-main().catch(()=>{process.exitCode=1});
+
+async function writeSafely(target, files, content) {
+  if (target === '') throw Error('Output path is empty');
+  const destinationPath = await prospectivePath(target);
+  for (const file of files) {
+    if (normalized(file) === normalized(target) || await prospectivePath(file) === destinationPath) {
+      throw Error('Output aliases an input file');
+    }
+  }
+  // The opened object is also compared by identity before any truncation.
+  let handle;
+  try { handle = await open(target, 'r+'); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    handle = await open(target, 'wx+');
+  }
+  try {
+    const destination = await handle.stat({ bigint: true });
+    if (!destination.isFile()) throw Error('Output is not a regular file');
+    for (const file of files) {
+      let source;
+      try { source = await stat(file, { bigint: true }); }
+      catch (error) {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') continue;
+        throw Error(`Cannot establish input identity: ${error.message}`);
+      }
+      if (source.ino === 0n || destination.ino === 0n) throw Error('Cannot establish file identity');
+      if (source.dev === destination.dev && source.ino === destination.ino) throw Error('Output aliases an input file');
+    }
+    await handle.truncate(0);
+    await handle.writeFile(content);
+  } finally { await handle.close(); }
+}
+
+async function main() {
+  const options = argumentsOf(process.argv.slice(2));
+  const inputErrors = [];
+  const files = await inputFiles(options.paths, process.cwd(), inputErrors);
+  const results = [];
+  for (const file of files) {
+    const fileId = path.resolve(file);
+    const language = languageFor(file);
+    if (!language) {
+      results.push({ fileId, source: null, analysis: null, diagnostics: [diagnostic('UNSUPPORTED_LANGUAGE', 'unsupported', 'Unsupported language', fileId)] });
+      continue;
+    }
+    let source, parsed;
+    try {
+      source = await readFile(file, 'utf8');
+      parsed = await parse(source, language);
+      const analysis = analyzerFor(language).analyze(parsed.tree, source, fileId);
+      results.push({ fileId, source: { fileId, source }, analysis, diagnostics: [] });
+    } catch (error) {
+      results.push({ fileId, source: source === undefined ? null : { fileId, source }, analysis: null,
+        diagnostics: [diagnostic(source === undefined ? 'READ_ERROR' : 'ANALYSIS_ERROR', source === undefined ? 'input' : 'internal', error.message, fileId)] });
+    } finally { parsed?.dispose(); }
+  }
+  const globals = inputErrors.map(error => diagnostic('INPUT_GLOB_ERROR', 'input', `${error.file}: ${error.message}`));
+  const aggregateResult = aggregate(results, globals);
+  const { report, selected } = makeReport(aggregateResult, options.filter);
+  const output = options.explain || options.format === 'markdown' ? markdown(report, selected, aggregateResult, options.explain)
+    : options.format === 'csv' ? csv(report) : JSON.stringify(report, null, 2) + '\n';
+  if (options.format === 'csv' && !options.explain && report.diagnostics.length) process.stderr.write(diagnosticText(report) + '\n');
+  if (options.output !== undefined) await writeSafely(options.output, files, output);
+  else process.stdout.write(output);
+  if (report.summary.has_errors) process.exitCode = 1;
+}
+main().catch(error => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });

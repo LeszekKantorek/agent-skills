@@ -15,8 +15,8 @@ test('CLI preserves broken files and filters outer after analysis',async()=>{
   await writeFile(path.join(dir,'other.xyz'),'x');
   const r=run(dir,'--path','good.js','--path','bad.rs','--path','other.xyz','--filter','one');
   assert.equal(r.status,1); const report=JSON.parse(r.stdout);
-  assert.deepEqual(report.summary,{files:3,functions_found:2,functions_presented:1});
-  assert.deepEqual(Object.keys(report.functions[0]),['location','name','metrics']);
+  assert.deepEqual(report.summary,{files:3,functions_found:3,functions_presented:1,function_discovery_complete:false,has_errors:true});
+  assert.deepEqual(Object.keys(report.functions[0]),['id','fileId','range','location','name','metrics']);
   assert.equal(report.functions[0].location,'good.js:1:1');
   assert.deepEqual(report.functions[0].metrics,{cognitive_complexity:1,statement_count:2,cyclomatic_complexity:2});
   assert.equal('analyzed_files' in report,false);
@@ -41,10 +41,10 @@ test('CSV format writes filtered metrics and explain still produces Markdown',as
   const r=run(dir,'--path','a,b.js','--format','csv','--filter','proc','--output','report.csv');
   assert.equal(r.status,0);assert.equal(r.stdout,'');
   const csv=await readFile(path.join(dir,'report.csv'),'utf8');
-  assert.match(csv,/^# Code Complexity Metrics\n# Files: 1; functions found: 2; functions presented: 1\n/);
+  assert.match(csv,/^# Code Complexity Metrics\n# Files: 1; functions found: 2; functions presented: 1; function discovery complete: true; has errors: false\n/);
   assert.match(csv,/Name,Location,Cognitive,Cyclomatic,Statements\nprocess,"a,b\.js:1:1",0,1,1\n$/);
   const explained=run(dir,'--path','a,b.js','--format','csv','--explain');
-  assert.equal(explained.status,0);assert.match(explained.stdout,/^Files: 1; functions found: 2; functions presented: 2\n\n/);assert.match(explained.stdout,/```javascript/);
+  assert.equal(explained.status,0);assert.match(explained.stdout,/Files: 1; functions found: 2; functions presented: 2;/);assert.match(explained.stdout,/```javascript/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('explain increments sum to reported metrics, including operator lines',async()=>{
@@ -55,7 +55,7 @@ test('explain increments sum to reported metrics, including operator lines',asyn
   assert.match(r.stdout,/Cognitive: 4; Cyclomatic: 3; Statements: 5/);
   const body=r.stdout.split('```javascript\n')[1].split('\n```')[0];
   const totals=[0,0,0];
-  for(const line of body.split('\n').slice(0,-1)) {
+  for(const line of body.split('\n')) {
    const found=[...line.matchAll(/(?:Cognitive|Cyclomatic|Statements): (\+?\d+)/g)];
    found.forEach((m,i)=>totals[i]+=Number(m[1]));
   }
@@ -67,7 +67,7 @@ test('explain shows increments for an outer inside template interpolation',async
  try {
   await writeFile(path.join(dir,'a.js'),'const x = `start\n${() => {\n if(a) {}\n}}\nend`;');
   const r=run(dir,'--path','a.js','--explain'); assert.equal(r.status,0);
-  assert.match(r.stdout,/if\(a\) \{\} +\/\/ Cognitive: \+1/);
+  assert.match(r.stdout,/if\(a\) \{\}/);assert.match(r.stdout,/Wiersz 3: Cognitive: \+1; Cyclomatic: \+1; Statements: \+1/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('scoring comments remain outside multiline literals',async()=>{
@@ -76,7 +76,7 @@ test('scoring comments remain outside multiline literals',async()=>{
   await writeFile(path.join(dir,'a.js'),'function f(){\n const s = `first\nsecond\nlast`;\n return s;\n}');
   const r=run(dir,'--path','a.js','--explain');assert.equal(r.status,0);
   assert.match(r.stdout,/`first\nsecond\nlast`; +\/\//);
-  assert.match(r.stdout,/\/\/ line 2:/);assert.match(r.stdout,/\/\/ line 3:/);
+  assert.match(r.stdout,/Wiersz 2:/);assert.match(r.stdout,/Wiersz 3:/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('filter matches prefixes, preserves every matching outer and does not hide errors',async()=>{
@@ -86,7 +86,7 @@ test('filter matches prefixes, preserves every matching outer and does not hide 
   await writeFile(path.join(dir,'bad.js'),'function ok(){} function broken( {');
   const r=run(dir,'--path','a.js','--path','bad.js','--filter','process|process');
   assert.equal(r.status,1); const report=JSON.parse(r.stdout);
-  assert.equal(report.summary.functions_found,13);assert.equal(report.summary.functions_presented,12);
+  assert.equal(report.summary.functions_found,14);assert.equal(report.summary.functions_presented,12);
   assert.ok(report.functions.every(f=>f.name==='process'));
   assert.deepEqual(report.functions.map(f=>Number(f.location.split(':').at(-2))),Array.from({length:12},(_,i)=>i+1));
   assert.equal('analyzed_files' in report,false);
@@ -103,18 +103,18 @@ test('filter selects name prefixes and presents only their files in JSON and Mar
   const report=JSON.parse(json.stdout);
   assert.deepEqual(report.functions.map(f=>f.name),['process','processExtra','save']);
   assert.deepEqual([...new Set(report.functions.map(f=>f.location.split(':')[0]))],['a.js','b.js']);
-  assert.deepEqual(report.summary,{files:3,functions_found:5,functions_presented:3});
+  assert.deepEqual(report.summary,{files:3,functions_found:5,functions_presented:3,function_discovery_complete:true,has_errors:false});
   for(const mode of [['--format','markdown'],['--explain']]) {
    const md=run(dir,...args,...mode); assert.equal(md.status,0);
    assert.match(md.stdout,/a\.js/); assert.match(md.stdout,/b\.js/); assert.doesNotMatch(md.stdout,/c\.js/);
   }
   const none=JSON.parse(run(dir,'--path','*.js','--filter','missing').stdout);
   assert.equal('analyzed_files' in none,false); assert.deepEqual(none.functions,[]);
-  assert.deepEqual(none.summary,{files:3,functions_found:5,functions_presented:0});
+  assert.deepEqual(none.summary,{files:3,functions_found:5,functions_presented:0,function_discovery_complete:true,has_errors:false});
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('empty input and malformed arguments use expected exit codes',()=>{
- const empty=run(os.tmpdir());assert.equal(empty.status,0);assert.deepEqual(JSON.parse(empty.stdout).summary,{files:0,functions_found:0,functions_presented:0});
+ const empty=run(os.tmpdir());assert.equal(empty.status,0);assert.deepEqual(JSON.parse(empty.stdout).summary,{files:0,functions_found:0,functions_presented:0,function_discovery_complete:true,has_errors:false});
  assert.equal(run(os.tmpdir(),'--path').status,1);assert.equal(run(os.tmpdir(),'--format','xml').status,1);
 });
 test('missing literal file does not prevent remaining analysis',async()=>{
@@ -123,7 +123,7 @@ test('missing literal file does not prevent remaining analysis',async()=>{
   await writeFile(path.join(dir,'a.js'),'function a(){}');await writeFile(path.join(dir,'z.rs'),'fn z(){}');
   const r=run(dir,'--path','a.js','--path','missing.rs','--path','z.rs');
   assert.equal(r.status,1);const report=JSON.parse(r.stdout);
-  assert.deepEqual(report.summary,{files:3,functions_found:2,functions_presented:2});
+  assert.deepEqual(report.summary,{files:3,functions_found:2,functions_presented:2,function_discovery_complete:false,has_errors:true});
   assert.deepEqual(report.functions.map(f=>f.name),['a','z']);
   assert.equal('analyzed_files' in report,false);
  } finally {await rm(dir,{recursive:true,force:true})}
@@ -134,7 +134,7 @@ test('UC-14 public CLI compares equivalent Rust and JS with manual expectations'
   await writeFile(path.join(dir,'a.js'),'function f(){if(a){const g=()=>{if(b){if(c){work();}}};}}');
   await writeFile(path.join(dir,'b.rs'),'fn f(){if a {let g=||{if b {if c {work();}}};}}');
   const r=run(dir,'--path','*.js','--path','*.rs','--format','json');assert.equal(r.status,0);
-  const report=JSON.parse(r.stdout); assert.deepEqual(report.summary,{files:2,functions_found:2,functions_presented:2});
+  const report=JSON.parse(r.stdout); assert.deepEqual(report.summary,{files:2,functions_found:2,functions_presented:2,function_discovery_complete:true,has_errors:false});
   for(const item of report.functions) assert.deepEqual(item.metrics,{cognitive_complexity:8,statement_count:5,cyclomatic_complexity:4});
  } finally {await rm(dir,{recursive:true,force:true})}
 });
@@ -145,7 +145,7 @@ test('UC-15 assigns logical operators to their lines and sums increments',async(
   const r=run(dir,'--path','a.js','--explain','--format','json');assert.equal(r.status,0);
   assert.match(r.stdout,/return a && +\/\/ Cognitive: \+1.*Cyclomatic: \+1/);
   assert.match(r.stdout,/b \|\| +\/\/ Cognitive: \+1.*Cyclomatic: \+1/);
-  assert.match(r.stdout,/\/\/ Cognitive: 2; Cyclomatic: 3; Statements: 1/);
+  assert.match(r.stdout,/Cognitive: 2; Cyclomatic: 3; Statements: 1/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('UC-09/16 JSON and Markdown present the same selected names and totals',async()=>{
@@ -155,7 +155,7 @@ test('UC-09/16 JSON and Markdown present the same selected names and totals',asy
   const json=run(dir,'--path','a.js','--filter','process|save','--format','json');
   const md=run(dir,'--path','a.js','--filter','process|save','--format','markdown');
   assert.equal(json.status,0);assert.equal(md.status,0);const report=JSON.parse(json.stdout);
-  assert.deepEqual(report.summary,{files:1,functions_found:3,functions_presented:2});
+  assert.deepEqual(report.summary,{files:1,functions_found:3,functions_presented:2,function_discovery_complete:true,has_errors:false});
   assert.deepEqual(report.functions.map(f=>f.name),['process','save']);
   assert.match(md.stdout,/functions found: 3; functions presented: 2/);
   assert.match(md.stdout,/\| Name\s+\| Location\s+\|\s+Cognitive \|\s+Cyclomatic \|\s+Statements \|/);

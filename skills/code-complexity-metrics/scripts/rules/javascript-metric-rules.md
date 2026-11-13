@@ -133,6 +133,8 @@ JavaScript syntax maps to the [generic declarator](generic-metric-rules.md#calls
 
 * `var`, `let`, and `const` declarations contain declarators; destructuring forms a shared pattern.
 * Bindings declared with `var`, `let`, or `const` in `for-in` and `for-of` headers are declarators.
+* Each class field is a declarator, including fields without initializers. Static and private modifiers add no points. Analyze the field name and initializer in their respective contexts. Operations in the initializer do not suppress an expression-statement wrapper around the class expression.
+* An assignment to an existing field, a method, and an object literal property are distinct from a field declarator.
 * An expression-bodied arrow's result is an implicit return. A conditional arrow body is a value-producing selection.
 
 Complete scores for these forms are shown below:
@@ -283,3 +285,7 @@ JavaScript adds update expressions and maps `new` expressions to explicit calls:
 | Update total | One prefix or postfix update | `x++;`<br>`++x;` | 1 |
 | Constructor total | One explicit constructor call | `new Foo();` | 1 |
 | Constructor-initializer total | A declarator initialized by a constructor with a nested argument call | `let x = new Foo(load());` | 3 |
+
+### Delegated suspension, environment and debugging mappings
+
+`yield` and `yield*` each write one explicit suspension and contribute Statements 1 on `yield_expression`; `*` adds no second operation. `with` establishes a name-resolution environment and contributes Statements 1 on `with_statement`; its body is a direct body. `debugger` is an explicit debugger command and contributes Statements 1 on `debugger_statement`. Each has Cognitive 0 and Cyclomatic 0 of its own; visit all children under their ordinary contexts. These delegated decisions extend the earlier profile and do not depend on runtime execution or debugger availability.

@@ -180,8 +180,8 @@ function selection_value(){1+(a?1:2);}
     const result=run(...args);
     assert.equal(result.status,0,result.stderr);
     const report=JSON.parse(result.stdout);
-    const expected={chain:[2,3,2],returned_closure:[0,1,2],trailing_item:[0,1,0],constant:[2,2,4],computed:[0,1,2],labeled:[0,1,1],standalone:[0,1,2],switch_blocks:[1,3,2],class_value:[0,1,3],selection_value:[1,2,3]};
-    assert.deepEqual(report.summary,{files:2,functions_found:10,functions_presented:10});
+    const expected={chain:[2,3,2],returned_closure:[0,1,2],trailing_item:[0,1,0],constant:[2,2,4],computed:[0,1,2],labeled:[0,1,1],standalone:[0,1,2],switch_blocks:[1,3,6],class_value:[0,1,2],selection_value:[1,2,3]};
+    assert.deepEqual(report.summary,{files:2,functions_found:10,functions_presented:10,function_discovery_complete:true,has_errors:false});
     for(const fn of report.functions) assert.deepEqual(keys.map(key=>fn.metrics[key]), expected[fn.name], fn.name);
     const written=run(...args,'--output','report.json');
     assert.equal(written.status,0,written.stderr);
@@ -201,15 +201,14 @@ function selection_value(){1+(a?1:2);}
     blocks.forEach((match,index)=>{
       const lines=match[1].split('\n');
       const totals=[0,0,0];
-      for(const line of lines.slice(0,-1)) {
+      for(const line of lines) {
         const annotation=line.match(/\/\/ Cognitive: ([+\d]+).*; Cyclomatic: ([+\d]+).*; Statements: ([+\d]+)/);
         assert.ok(annotation,line);
         annotation.slice(1).forEach((value,i)=>totals[i]+=Number(value));
       }
       const name=report.functions[index].name;
       assert.deepEqual(totals,expected[name],name);
-      assert.equal(lines.at(-1),`// Cognitive: ${totals[0]}; Cyclomatic: ${totals[1]}; Statements: ${totals[2]}`);
     });
-    assert.match(explained.stdout,/&& x>0 \{\} +\/\/ Cognitive: \+1 \(&&\); Cyclomatic: \+1 \(&&\); Statements: 0/);
+    assert.match(explained.stdout,/&& x>0 \{\} +\/\/ Cognitive: \+1; Cyclomatic: \+1; Statements: 0/);
   } finally { await rm(dir,{recursive:true,force:true}); }
 });

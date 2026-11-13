@@ -2,14 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Code Complexity Metrics report",
   "type": "object",
-  "required": [
-    "schema_version",
-    "rules_version",
-    "analyzer_version",
-    "parser",
-    "summary",
-    "functions"
-  ],
   "properties": {
     "schema_version": {
       "type": "string"
@@ -22,10 +14,6 @@
     },
     "parser": {
       "type": "object",
-      "required": [
-        "package",
-        "version"
-      ],
       "properties": {
         "package": {
           "type": "string"
@@ -33,47 +21,140 @@
         "version": {
           "type": "string"
         }
-      }
+      },
+      "required": [
+        "package",
+        "version"
+      ],
+      "additionalProperties": false
     },
     "summary": {
       "type": "object",
-      "required": [
-        "files",
-        "functions_found",
-        "functions_presented"
-      ],
-      "additionalProperties": false,
       "properties": {
         "files": {
           "type": "integer",
-          "minimum": 0,
-          "description": "All analyzed files before filtering."
+          "minimum": 0
         },
         "functions_found": {
           "type": "integer",
-          "minimum": 0,
-          "description": "All outer functions found before filtering."
+          "minimum": 0
         },
         "functions_presented": {
           "type": "integer",
-          "minimum": 0,
-          "description": "Outer functions selected by the filter."
+          "minimum": 0
+        },
+        "function_discovery_complete": {
+          "type": "boolean"
+        },
+        "has_errors": {
+          "type": "boolean"
         }
+      },
+      "required": [
+        "files",
+        "functions_found",
+        "functions_presented",
+        "function_discovery_complete",
+        "has_errors"
+      ],
+      "additionalProperties": false
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z]:[\\\\/]|/|\\\\\\\\)",
+            "description": "Absolute normalized input path."
+          },
+          "analyzed": {
+            "type": "boolean"
+          },
+          "functionDiscoveryComplete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "fileId",
+          "analyzed",
+          "functionDiscoveryComplete"
+        ],
+        "additionalProperties": false
       }
     },
     "functions": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": [
-          "location",
-          "name",
-          "metrics"
-        ],
         "properties": {
-          "location": {
+          "id": {
+            "type": "string"
+          },
+          "fileId": {
             "type": "string",
-            "description": "File path, line, and column of the outer function. Source edits can change this value."
+            "pattern": "^(?:[A-Za-z]:[\\\\/]|/|\\\\\\\\)",
+            "description": "Absolute normalized input path."
+          },
+          "range": {
+            "type": "object",
+            "required": [
+              "startIndex",
+              "endIndex",
+              "startPosition",
+              "endPosition"
+            ],
+            "properties": {
+              "startIndex": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "endIndex": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "startPosition": {
+                "type": "object",
+                "required": [
+                  "row",
+                  "column"
+                ],
+                "properties": {
+                  "row": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "column": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "additionalProperties": false
+              },
+              "endPosition": {
+                "type": "object",
+                "required": [
+                  "row",
+                  "column"
+                ],
+                "properties": {
+                  "row": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "column": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "location": {
+            "type": "string"
           },
           "name": {
             "type": [
@@ -83,21 +164,8 @@
           },
           "metrics": {
             "type": "object",
-            "required": [
-              "cognitive_complexity",
-              "statement_count",
-              "cyclomatic_complexity"
-            ],
-            "additionalProperties": false,
             "properties": {
               "cognitive_complexity": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "minimum": 0
-              },
-              "statement_count": {
                 "type": [
                   "integer",
                   "null"
@@ -110,12 +178,168 @@
                   "null"
                 ],
                 "minimum": 0
+              },
+              "statement_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
               }
-            }
+            },
+            "required": [
+              "cognitive_complexity",
+              "cyclomatic_complexity",
+              "statement_count"
+            ],
+            "additionalProperties": false
           }
         },
+        "required": [
+          "id",
+          "fileId",
+          "range",
+          "location",
+          "name",
+          "metrics"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "input",
+              "parse",
+              "unsupported",
+              "internal"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "fileId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^(?:[A-Za-z]:[\\\\/]|/|\\\\\\\\)",
+            "description": "Absolute normalized input path; null denotes a global diagnostic."
+          },
+          "range": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "startIndex",
+                  "endIndex",
+                  "startPosition",
+                  "endPosition"
+                ],
+                "properties": {
+                  "startIndex": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "endIndex": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "startPosition": {
+                    "type": "object",
+                    "required": [
+                      "row",
+                      "column"
+                    ],
+                    "properties": {
+                      "row": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "column": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "endPosition": {
+                    "type": "object",
+                    "required": [
+                      "row",
+                      "column"
+                    ],
+                    "properties": {
+                      "row": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "column": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "owner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "affectedMetrics": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "cognitive",
+                "cyclomatic",
+                "statements"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "affectsFunctionDiscovery": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "category",
+          "message",
+          "fileId",
+          "range",
+          "owner",
+          "affectedMetrics",
+          "affectsFunctionDiscovery"
+        ],
         "additionalProperties": false
       }
     }
-  }
+  },
+  "required": [
+    "schema_version",
+    "rules_version",
+    "analyzer_version",
+    "parser",
+    "summary",
+    "files",
+    "functions",
+    "diagnostics"
+  ],
+  "additionalProperties": false
 }
