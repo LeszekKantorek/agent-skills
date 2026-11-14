@@ -1,10 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {parse} from '../scripts/parser.mjs';
-import {outerFunctions} from '../scripts/ir.mjs';
-import {complexityEvents} from '../scripts/metrics/complexity.mjs';
-import {statementEvents} from '../scripts/metrics/statements.mjs';
-async function triple(source,language){const p=await parse(source,language);try{assert.equal(p.tree.rootNode.hasError,false);const functions=outerFunctions(p.tree.rootNode);assert.equal(functions.length,1);const events=[...complexityEvents(functions[0]),...statementEvents(functions[0],language)];return ['cognitive_complexity','statement_count','cyclomatic_complexity'].map(key=>events.filter(x=>x.metric===key).reduce((a,e)=>a+e.amount,0))}finally{p.dispose()}}
+import {productionScore} from './production-score.mjs';
+async function triple(source,language) { const m=await productionScore(source,language); return [m.cognitive,m.statements,m.cyclomatic]; }
 test('equivalent Rust and JS constructions match manually derived triples',async()=>{
  const cases=[
   ['function f(){}','fn f(){}',[0,0,1]],

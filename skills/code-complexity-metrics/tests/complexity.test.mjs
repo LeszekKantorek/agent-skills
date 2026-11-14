@@ -1,12 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {parse} from '../scripts/parser.mjs';
-import {outerFunctions} from '../scripts/ir.mjs';
-import {complexityEvents} from '../scripts/metrics/complexity.mjs';
-async function score(source, lang) {
- const p = await parse(source,lang);
- try { assert.equal(p.tree.rootNode.hasError,false); const e=complexityEvents(outerFunctions(p.tree.rootNode)[0]); return ['cognitive_complexity','cyclomatic_complexity'].map(k => e.filter(x=>x.metric===k).reduce((s,x)=>s+x.amount,0)); } finally { p.dispose(); }
-}
+import {productionScore} from './production-score.mjs';
+async function score(source, lang) { const m=await productionScore(source,lang); return [m.cognitive,m.cyclomatic]; }
 test('decisions and nesting use project rules in both languages',async()=>{
  for (const [lang, flat,nested] of [
   ['javascript','function f(){if(a){} if(b){} if(c){}}','function f(){if(a){if(b){if(c){}}}}'],

@@ -29,7 +29,7 @@ Requirements:
   No npm install, compilation, or internet connection is required.
 
 Options:
-  --path "<file-or-glob>"  Rust .rs or JavaScript .js input.
+  --path "<file-or-glob>"  Rust .rs or JavaScript .js or .mjs input.
                            Repeat for multiple files or patterns. Quote globs.
   --format <format>        json (default), markdown, or csv.
   --filter "prefix|other"  Select outer names by case-sensitive prefixes.

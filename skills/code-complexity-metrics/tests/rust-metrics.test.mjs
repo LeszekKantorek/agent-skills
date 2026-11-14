@@ -66,3 +66,13 @@ test('Rust: self-contained true airspeed fixture',async()=>{
  const s=`fn f() { for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.01] { assert!(TrueAirspeed::new(value).is_err()); } for value in [0.0, 85.5, 999.0, 999.01, 1000.0, f64::MAX] { assert_eq!(TrueAirspeed::new(value).unwrap().knots(), value); } }`;
  const p=await run(s); assert.deepEqual(p.diagnostics,[]); assert.deepEqual(total(p),[2,3,11]);
 });
+
+test('Rust: a labeled break is not treated as unlabeled when source is omitted', async()=>{
+ const source="fn f()->i32 {loop {break 'missing 42;}}";
+ const parser=await parse(source,'rust');
+ try {
+  const p=prepare(parser.tree,source,'f');
+  statements(p);
+  assert.equal(total(p)[2],2);
+ } finally { parser.dispose(); }
+});

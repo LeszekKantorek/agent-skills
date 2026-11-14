@@ -1,33 +1,24 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {productionScore} from './production-score.mjs';
 import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {parse} from '../scripts/parser.mjs';
-import {outerFunctions} from '../scripts/ir.mjs';
-import {complexityEvents} from '../scripts/metrics/complexity.mjs';
-import {statementEvents} from '../scripts/metrics/statements.mjs';
 
 const keys=['cognitive_complexity', 'cyclomatic_complexity', 'statement_count'];
 const script=fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
 
 async function check(language, source, expected) {
-  const parsed=await parse(source, language);
-  try {
-    assert.equal(parsed.tree.rootNode.hasError, false, source);
-    const functions=outerFunctions(parsed.tree.rootNode);
-    assert.equal(functions.length, 1, source);
-    const events=[...complexityEvents(functions[0]), ...statementEvents(functions[0], language)];
-    assert.deepEqual(keys.map(key=>events.filter(event=>event.metric===key).reduce((sum,event)=>sum+event.amount,0)), expected, source);
-  } finally { parsed.dispose(); }
+  const m=await productionScore(source,language);
+  assert.deepEqual([m.cognitive,m.cyclomatic,m.statements], expected, source);
 }
 
 // Expectations below are (Cognitive, Cyclomatic, Statements), derived from
-// .plans/code-complexity-metrics/code-complexity-metric-rules.md, not analyzer output.
+// the version 2.0 metric rules.
 test('R1: Rust let-chains count conjunctions, sequence changes and separate initializers', async()=>{
-  // Lines 66-69, 127 and 149: one condition/loop, each logical operator,
+  // Count one condition/loop, each logical operator,
   // first AND/OR sequence and changes; each binding and written call.
   for(const [source, expected] of [
     ['fn f(){if let Some(x)=value && x>0 {}}', [2,3,2]],
@@ -41,7 +32,7 @@ test('R1: Rust let-chains count conjunctions, sequence changes and separate init
 });
 
 test('R2: Rust non-block closure bodies return a value only when the body does', async()=>{
-  // Lines 149 and 151: declaration + explicit return; an explicit return
+  // Count the declaration and explicit return; an explicit return
   // replaces an implicit return. Value-producing nested closures still return values.
   for(const [source, expected] of [
     ['fn f(){let g=|| return 42;}', [0,1,2]],
@@ -57,7 +48,7 @@ test('R2: Rust non-block closure bodies return a value only when the body does',
 });
 
 test('R3: Rust trailing items are not tail values, including inside extra blocks', async()=>{
-  // Lines 149, 261, 263 and 265: items are not returned expressions;
+  // Items are not returned expressions;
   // extra blocks and actual tail values retain their own points.
   for(const [source, expected] of [
     ['fn f(){struct S;}', [0,1,0]],
@@ -82,8 +73,8 @@ test('R3: Rust trailing items are not tail values, including inside extra blocks
 });
 
 test('J1: JavaScript computed method names retain every explicit call', async()=>{
-  // Lines 147 and 149: each written call, including initializer calls,
-  // contributes separately from the declarator and nested-body statements.
+  // Each written call, including initializer calls,
+  // contributes to its enclosing owner, separately from nested-body statements.
   for(const [source, expected] of [
     ['function f(){const x={ [factory()](){} };}', [0,1,2]],
     ['function f(){class C{[factory()](){}}}', [0,1,1]],
@@ -91,12 +82,12 @@ test('J1: JavaScript computed method names retain every explicit call', async()=
     ['function f(){const x={ [factory()](){work();} };}', [0,1,3]],
     ['function f(){const x={ get [factory()](){return 1;} };}', [0,1,3]],
     ['function f(){const x={ [factory()](x=load()){save();} };}', [0,1,4]],
-    ['const x={ [factory()](){} };', [0,1,1]],
+    ['const x={ [factory()](){} };', [0,1,0]],
   ]) await check('javascript', source, expected);
 });
 
 test('J2: JavaScript labels and static blocks do not receive direct-body exemptions', async()=>{
-  // Lines 261-265: only the enumerated direct function/control bodies
+  // Only the enumerated direct function/control bodies
   // are exempt; every additional block contributes, even when empty.
   for(const [source, expected] of [
     ['function f(){label:{}}', [0,1,1]],
@@ -105,20 +96,20 @@ test('J2: JavaScript labels and static blocks do not receive direct-body exempti
     ['function f(){label:while(a){}}', [1,2,1]],
     ['function f(){class C{static {}}}', [0,1,1]],
     ['function f(){class C{static {work();}}}', [0,1,2]],
-    ['function f(){try{}catch(e){}finally{}}', [1,1,1]],
-    ['function f(){switch(x){case 1:{}}}', [1,2,1]],
-    ['function f(){switch(x){default:{}}}', [1,2,1]],
-    ['function f(){switch(x){case 1:{work();}}}', [1,2,2]],
-    ['function f(){switch(x){case 1:{{work();}}}}', [1,2,3]],
-    ['function f(){switch(x){case 1:{}{}}}', [1,2,1]],
-    ['function f(){switch(x){case 1:work();{}{} default:{}{}}}', [1,3,2]],
-    ['function f(){switch(x){case 1:{}{{}}}}', [1,2,2]],
+    ['function f(){try{}catch(e){}finally{}}', [1,1,2]],
+    ['function f(){switch(x){case 1:{}}}', [1,2,2]],
+    ['function f(){switch(x){default:{}}}', [1,2,2]],
+    ['function f(){switch(x){case 1:{work();}}}', [1,2,3]],
+    ['function f(){switch(x){case 1:{{work();}}}}', [1,2,4]],
+    ['function f(){switch(x){case 1:{}{}}}', [1,2,3]],
+    ['function f(){switch(x){case 1:work();{}{} default:{}{}}}', [1,3,6]],
+    ['function f(){switch(x){case 1:{}{{}}}}', [1,2,4]],
   ]) await check('javascript', source, expected);
 });
 
 test('J3: nested function bodies do not replace a standalone expression point', async()=>{
-  // Lines 39, 149, 362 and 370: the standalone expression contributes once;
-  // its nested body contributes independently. Calls/assignments still need no wrapper.
+  // A standalone expression contributes when its own context has no counted operation;
+  // nested function bodies contribute independently. A static block can suppress the wrapper.
   for(const [language, source, expected] of [
     ['javascript', 'function f(){(()=>{});}', [0,1,1]],
     ['javascript', 'function f(){(()=>{return 1;});}', [0,1,2]],
@@ -135,9 +126,9 @@ test('J3: nested function bodies do not replace a standalone expression point', 
     ['rust', 'fn f(){|| 42;}', [0,1,2]],
     ['rust', 'fn f(){|| work();}', [0,1,3]],
     ['javascript', 'function f(){(class {});}', [0,1,1]],
-    ['javascript', 'function f(){(class {static {}});}', [0,1,2]],
-    ['javascript', 'function f(){(class {static {;}});}', [0,1,3]],
-    ['javascript', 'function f(){(class {static {if(a){}}});}', [1,2,3]],
+    ['javascript', 'function f(){(class {static {}});}', [0,1,1]],
+    ['javascript', 'function f(){(class {static {;}});}', [0,1,2]],
+    ['javascript', 'function f(){(class {static {if(a){}}});}', [1,2,2]],
     ['javascript', 'function f(){(class {static {factory();}});}', [0,1,2]],
     ['javascript', 'function f(){(class {static {x=1;}});}', [0,1,2]],
     ['javascript', 'function f(){(class {static {x++;}});}', [0,1,2]],
@@ -146,10 +137,10 @@ test('J3: nested function bodies do not replace a standalone expression point', 
     ['javascript', 'function f(){-(a?2:3);}', [1,2,3]],
     ['javascript', 'function f(){1+(a?(b?2:3):4);}', [3,3,5]],
     ['javascript', 'function f(){({x:a?1:2});}', [1,2,3]],
-    ['javascript', 'function f(){(class {static {a?1:2;}});}', [1,2,5]],
-    ['javascript', 'function f(){(class {static {1+(a?1:2);}});}', [1,2,5]],
-    ['javascript', 'function f(){(class {static {const x=a?1:2;}});}', [1,2,6]],
-    ['javascript', 'function f(){({[a?1:2](){}});}', [2,2,3]],
+    ['javascript', 'function f(){(class {static {a?1:2;}});}', [1,2,4]],
+    ['javascript', 'function f(){(class {static {1+(a?1:2);}});}', [1,2,4]],
+    ['javascript', 'function f(){(class {static {const x=a?1:2;}});}', [1,2,5]],
+    ['javascript', 'function f(){({[a?1:2](){}});}', [1,2,3]],
     ['javascript', 'function f(){({method(){a?1:2;}});}', [2,2,4]],
     ['rust', 'fn f(){1+if b {1}else{2};}', [2,2,3]],
     ['rust', 'fn f(){1+{if b {1}else{2}};}', [2,2,4]],

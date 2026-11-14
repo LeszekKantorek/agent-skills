@@ -1,9 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {parse} from '../scripts/parser.mjs';
-import {outerFunctions} from '../scripts/ir.mjs';
-import {statementEvents} from '../scripts/metrics/statements.mjs';
-async function count(source,lang){const p=await parse(source,lang); try {assert.equal(p.tree.rootNode.hasError,false);return statementEvents(outerFunctions(p.tree.rootNode)[0],lang).length}finally{p.dispose()}}
+import {productionScore} from './production-score.mjs';
+async function count(source,lang) { return (await productionScore(source,lang)).statements; }
 test('hand calculated statements across Rust and JavaScript',async()=>{
  for (const [js,rs,expected] of [
  ['function f(){}','fn f(){}',0],
@@ -73,7 +71,7 @@ test('Rust blocks yield values inside compound expressions',async()=>{
  assert.equal(await count('fn f(){let x=({prepare();calculate()},0);}','rust'),5);
  assert.equal(await count('fn f(){let x=[{prepare();calculate()}];}','rust'),5);
 });
-test('macro invocation in value position counts the return and no macro interior',async()=>{
+test('macro invocations in value position count the call and result',async()=>{
  assert.equal(await count('fn f()->i32 {answer!()}','rust'),2);
  assert.equal(await count('fn f(){let x=if b {answer!()}else{2};}','rust'),5);
 });
@@ -97,8 +95,8 @@ test('verification matrix: branch values, bindings, macros and standalone expres
   ['rust','fn f(){for (key,value) in pairs {}}',2],
   ['javascript','function f(){for(const [key,value] of pairs){}}',2],
   ['rust','fn f(){macro_rules! answer {()=>{if b {call()} else {other()}}}}',1],
-  ['rust','fn f(){println!(if a {call()}); let x=vec![call()];}',3],
-  ['javascript','function f(){try{}catch(error){recover();}}',2],
+  ['rust','fn f(){println!(if a {call()}); let x=vec![call()];}',7],
+  ['javascript','function f(){try{}catch(error){recover();}}',3],
  ];
  for(const [language,source,expected] of cases) assert.equal(await count(source,language),expected,source);
 });

@@ -9,11 +9,17 @@ import os from 'node:os';
 const schema = JSON.parse(await readFile(new URL('../references/report-schema.json', import.meta.url), 'utf8'));
 const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const lock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'));
+const schemaTypeChecks = new Map([
+  ['null', value => value === null],
+  ['array', Array.isArray],
+  ['object', value => value !== null && typeof value === 'object' && !Array.isArray(value)],
+  ['integer', Number.isInteger],
+]);
 function valid(s, v) {
   if (s.anyOf && !s.anyOf.some(branch => valid(branch, v))) return false;
   if (s.enum && !s.enum.includes(v)) return false;
   const types = Array.isArray(s.type) ? s.type : [s.type];
-  if (s.type && !types.some(t => t === 'null' ? v === null : t === 'array' ? Array.isArray(v) : t === 'object' ? v !== null && typeof v === 'object' && !Array.isArray(v) : t === 'integer' ? Number.isInteger(v) : typeof v === t)) return false;
+  if (s.type && !types.some(type => schemaTypeChecks.has(type) ? schemaTypeChecks.get(type)(v) : typeof v === type)) return false;
   if (typeof v === 'string' && ((s.pattern && !new RegExp(s.pattern).test(v)) || (s.minLength !== undefined && [...v].length < s.minLength))) return false;
   if (typeof v === 'number' && s.minimum !== undefined && v < s.minimum) return false;
   if (Array.isArray(v)) return (!s.uniqueItems || new Set(v).size === v.length) && (!s.items || v.every(x => valid(s.items, x)));
@@ -50,7 +56,7 @@ test('schema closes all report objects and validates required fields and types',
   for (const location of ['x:0:0:0', 'x:0:0:null']) { const r = structuredClone(complete); r.diagnostics[0] = { error: 'X', name: null, location }; assert.ok(valid(schema, r), location); r.diagnostics[0].name = 'f'; assert.equal(valid(schema, r), false, location); }
   for (const name of ['f', null]) { const r = structuredClone(complete); r.diagnostics[0] = { error: 'X', name, location: 'C:/a:b.js:1:2:0' }; assert.ok(valid(schema, r)); }
   for (const fileId of ['/x.js', 'C:/x.js', String.raw`C:\\x.js`, String.raw`\\\\server\\share\\x.js`, '//server/share/x.js']) { const r = structuredClone(complete); r.files[0].fileId = fileId; assert.ok(valid(schema, r), fileId); }
-  for (const fileId of [String.raw`C:\x.js`, String.raw`\\server\share\x.js`, '/x\ny', String.raw`/x\q`]) { const r = structuredClone(complete); r.files[0].fileId = fileId; assert.equal(valid(schema, r), false, fileId); }
+  for (const fileId of ["C:\\x.js", "\\\\server\\share\\x.js", '/x\ny', String.raw`/x\q`]) { const r = structuredClone(complete); r.files[0].fileId = fileId; assert.equal(valid(schema, r), false, fileId); }
   for (const fileId of [String.raw`/x\ny`, String.raw`/x\\ny`, String.raw`/x\u0085`]) { const r = structuredClone(complete); r.files[0].fileId = fileId; assert.ok(valid(schema, r), fileId); }
   for (const location of ['x\ny:1:1:2', String.raw`x\q:1:1:2`]) { const r = structuredClone(complete); r.functions[0].location = location; assert.equal(valid(schema, r), false, location); }
   const relative = structuredClone(complete); relative.files[0].fileId = 'x.js'; assert.equal(valid(schema, relative), false);

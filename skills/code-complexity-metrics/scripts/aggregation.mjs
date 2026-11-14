@@ -104,6 +104,21 @@ function collect(analysis, fileId, source) {
   return [...records.values()].map(({root,...r})=>({...r,rootRange:range(root),metrics:{...r.knownScore}}));
 }
 
+function physicalRows(r) {
+  const first = r.startPosition.row + 1;
+  const last = r.endIndex === r.startIndex ? first
+    : r.endPosition.row + 1 - (r.endPosition.column === 0 ? 1 : 0);
+  return {first, last};
+}
+
+function compareText(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function compareDiagnostics(a, b) {
+  return compareText(a.code, b.code) || compareText(a.message, b.message);
+}
+
 export function aggregate(fileResults, globalDiagnostics=[]) {
   const result={files:[],functions:[],diagnostics:[],functionDiscoveryComplete:true,hasErrors:false,sources:new Map(),presentation:new Map()};
   for (const file of fileResults) {
@@ -140,31 +155,30 @@ export function aggregate(fileResults, globalDiagnostics=[]) {
     for (const r of records) r.fileId=file.fileId;
     // Project scores only after analysis, using physical source rows shared by all owners.
     const masks = new Map();
-    const located = diagnostics.filter(d => d.range).sort((a,b) =>
-      a.range.startIndex-b.range.startIndex || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0) || (a.message < b.message ? -1 : a.message > b.message ? 1 : 0));
+    const located = diagnostics.filter(d => d.range).sort((a, b) =>
+      a.range.startIndex - b.range.startIndex || compareDiagnostics(a, b));
     for (const d of located) {
-      const r=d.range, first=r.startPosition.row;
       // A half-open end at the beginning of a line excludes that line.
-      const last=r.endIndex===r.startIndex ? first : r.endPosition.row-(r.endPosition.column===0 ? 1 : 0);
-      for (let row=first; row<=last; row++) {
-        if (!masks.has(row+1)) masks.set(row+1,[]);
-        masks.get(row+1).push(d);
+      const {first, last} = physicalRows(d.range);
+      for (let row = first; row <= last; row++) {
+        if (!masks.has(row)) masks.set(row, []);
+        masks.get(row).push(d);
       }
     }
     for (const record of records) {
-      const first=record.rootRange.startPosition.row+1;
-      const r=record.rootRange;
-      const last=r.endIndex===r.startIndex ? first : r.endPosition.row+1-(r.endPosition.column===0 ? 1 : 0);
-      const touched=new Set();
-      for (const [row,ds] of masks) if (row>=first && row<=last || record.byRow.has(row)) for (const d of ds) touched.add(d);
-      const relevant=located.filter(d => d.owner===record.id || touched.has(d));
-      const unlocated=diagnostics.filter(d => !d.range && d.owner===record.id).sort((a,b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0) || (a.message < b.message ? -1 : a.message > b.message ? 1 : 0));
-      record.error=relevant[0] ?? unlocated[0] ?? null;
-      record.errorRows=new Map();
-      for (const [row,ds] of masks) {
-        if (row>=first && row<=last || record.byRow.has(row) || ds.some(d=>d.owner===record.id)) record.errorRows.set(row,ds);
-        if (record.byRow.has(row)) record.byRow.set(row,zero());
+      const {first, last} = physicalRows(record.rootRange);
+      const touched = new Set();
+      record.errorRows = new Map();
+      for (const [row, ds] of masks) {
+        const hasScore = record.byRow.has(row);
+        const overlaps = hasScore || (row >= first && row <= last);
+        if (overlaps) for (const d of ds) touched.add(d);
+        if (overlaps || ds.some(d => d.owner === record.id)) record.errorRows.set(row, ds);
+        if (hasScore) record.byRow.set(row, zero());
       }
+      const relevant = located.filter(d => d.owner === record.id || touched.has(d));
+      const unlocated = diagnostics.filter(d => !d.range && d.owner === record.id).sort(compareDiagnostics);
+      record.error = relevant[0] ?? unlocated[0] ?? null;
       record.metrics=zero();
       for (const score of record.byRow.values()) add(record.metrics,score);
     }
