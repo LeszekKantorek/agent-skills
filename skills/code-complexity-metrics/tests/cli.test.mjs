@@ -16,7 +16,7 @@ test('CLI preserves broken files and filters outer after analysis',async()=>{
   const r=run(dir,'--path','good.js','--path','bad.rs','--path','other.xyz','--filter','one');
   assert.equal(r.status,1); const report=JSON.parse(r.stdout);
   assert.deepEqual(report.summary,{files:3,functions_found:3,functions_presented:1,function_discovery_complete:false,has_errors:true});
-  assert.deepEqual(Object.keys(report.functions[0]),['name','location','metrics']);
+  assert.deepEqual(Object.keys(report.functions[0]),['name','location','metrics','error']);
   assert.equal(report.functions[0].location,'good.js:1:1:30');
   assert.deepEqual(report.functions[0].metrics,{cognitive_complexity:1,statement_count:2,cyclomatic_complexity:2});
   assert.equal('analyzed_files' in report,false);
@@ -42,7 +42,7 @@ test('CSV format writes filtered metrics and explain still produces Markdown',as
   assert.equal(r.status,0);assert.equal(r.stdout,'');
   const csv=await readFile(path.join(dir,'report.csv'),'utf8');
   assert.match(csv,/^# Code Complexity Metrics\n# Files: 1; functions found: 2; functions presented: 1; function discovery complete: true; has errors: false\n/);
-  assert.match(csv,/Name,Location,Cognitive,Cyclomatic,Statements\nprocess,"a,b\.js:1:1:27",0,1,1\n$/);
+  assert.match(csv,/Name,Location,Cognitive,Cyclomatic,Statements,Error\nprocess,"a,b\.js:1:1:27",0,1,1,\n$/);
   const explained=run(dir,'--path','a,b.js','--format','csv','--explain');
   assert.equal(explained.status,0);assert.match(explained.stdout,/Files: 1; functions found: 2; functions presented: 2;/);assert.match(explained.stdout,/```javascript/);
  } finally {await rm(dir,{recursive:true,force:true})}
@@ -122,7 +122,7 @@ test('missing literal file aborts publication alongside valid files',async()=>{
  try {
   await writeFile(path.join(dir,'a.js'),'function a(){}');await writeFile(path.join(dir,'z.rs'),'fn z(){}');
   const r=run(dir,'--path','a.js','--path','missing.rs','--path','z.rs');
-  assert.equal(r.status,1); assert.equal(r.stdout,''); assert.match(r.stderr,/missing\.rs/);
+  assert.equal(r.status,1); assert.equal(JSON.parse(r.stdout).functions.length,2); assert.match(r.stderr,/missing\.rs/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('UC-14 public CLI compares equivalent Rust and JS with manual expectations',async()=>{

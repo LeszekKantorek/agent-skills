@@ -5,7 +5,7 @@ import { inputFiles, languageFor } from './input-files.mjs';
 import { parse } from './parser.mjs';
 import { analyzerFor } from './analyzers/registry.mjs';
 import { aggregate } from './aggregation.mjs';
-import { makeReport, markdown, csv, diagnosticText } from './public-report.mjs';
+import { makeReport, markdown, csv, diagnosticText, globalDiagnosticText } from './public-report.mjs';
 
 function argumentsOf(args) {
   const options = { paths: [], format: 'json', explain: false };
@@ -26,21 +26,29 @@ const normalized = file => {
   return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
 };
 
-// Resolve all existing ancestors before creating a destination. This covers a
-// missing input reached through a symlink to its directory, without touching it.
+// Resolve each existing component, including dangling symbolic links, before
+// comparing paths that may not exist yet. Keep link targets' dot segments until
+// their preceding components have been followed.
 async function prospectivePath(file) {
-  let current = path.resolve(file);
-  const suffix = [];
-  for (;;) {
-    try { return normalized(path.join(await realpath(current), ...suffix)); }
-    catch (error) {
-      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
-      const parent = path.dirname(current);
-      if (parent === current) throw error;
-      suffix.unshift(path.basename(current));
-      current = parent;
-    }
+  const absolute = path.resolve(file);
+  const split = value => process.platform === 'win32' ? value.split(/[\\/]+/) : value.split(/\/+/);
+  let root = path.parse(absolute).root;
+  let current = root, parts = split(absolute.slice(root.length)), links = 0;
+  while (parts.length) {
+    const part = parts.shift();
+    if (!part || part === '.') continue;
+    if (part === '..') { current = path.dirname(current); continue; }
+    const candidate = path.join(current, part);
+    let info;
+    try { info = await lstat(candidate); }
+    catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error; }
+    if (!info?.isSymbolicLink()) { current = candidate; continue; }
+    if (++links > 40) throw Error('Too many symbolic links in input path');
+    const link = await readlink(candidate);
+    if (path.isAbsolute(link)) { root = path.parse(link).root; current = root; parts.unshift(...split(link.slice(root.length))); }
+    else parts.unshift(...split(link));
   }
+  return normalized(current);
 }
 
 async function resolveDestination(target) {
@@ -144,14 +152,15 @@ async function main() {
   const globals = inputErrors.map(error => diagnostic('INPUT_GLOB_ERROR', 'input', `${error.file}: ${error.message}`));
   const aggregateResult = aggregate(results, globals);
   const { report, selected } = makeReport(aggregateResult, options.filter);
-  if (report.summary.has_errors && options.output !== undefined) {
-    if (report.diagnostics.length) process.stderr.write(diagnosticText(report) + '\n');
+  const globalErrors = aggregateResult.diagnostics.filter(d => d.fileId === null).map(globalDiagnosticText);
+  const messages = [diagnosticText(report), ...globalErrors].filter(Boolean).join('\n');
+  if (messages) process.stderr.write(messages + '\n');
+  if (aggregateResult.diagnostics.some(d => d.category === 'input' || d.category === 'internal') && !aggregateResult.files.some(file => file.analyzed || aggregateResult.diagnostics.some(d => d.fileId === file.fileId && d.code === 'UNSUPPORTED_LANGUAGE'))) {
     process.exitCode = 1;
     return;
   }
   const output = options.explain || options.format === 'markdown' ? markdown(report, selected, aggregateResult, options.explain)
     : options.format === 'csv' ? csv(report) : JSON.stringify(report, null, 2) + '\n';
-  if (options.format === 'csv' && !options.explain && report.diagnostics.length) process.stderr.write(diagnosticText(report) + '\n');
   if (options.output !== undefined) await writeSafely(options.output, files, output);
   else process.stdout.write(output);
   if (report.summary.has_errors) process.exitCode = 1;

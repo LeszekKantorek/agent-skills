@@ -22,7 +22,9 @@
  * entry per node, and no parser objects. Every non-null owner names a function;
  * each function root is in the tree and owned by its ID. analyze prepares a new
  * tree and runs the language's three independent passes. Presentation data also
- * survives parser disposal. Each lineAnnotations row is zero-based; endIndex
+ * survives parser disposal. If the original parser root has errors, comment ranges
+ * are empty and every line annotation is outside the source block; recovery
+ * cannot establish lexical boundaries safely. Each lineAnnotations row is zero-based; endIndex
  * and contentEndIndex are absolute UTF-16 offsets before the terminator;
  * contentEndIndex is present even when the safe endIndex is null.
  * null means the annotation must be placed outside the source block. Offsets

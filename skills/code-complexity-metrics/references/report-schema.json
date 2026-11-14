@@ -82,24 +82,15 @@
             "type": "object",
             "properties": {
               "cognitive_complexity": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
+                "type": "integer",
                 "minimum": 0
               },
               "cyclomatic_complexity": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
+                "type": "integer",
                 "minimum": 0
               },
               "statement_count": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
+                "type": "integer",
                 "minimum": 0
               }
             },
@@ -109,12 +100,19 @@
               "statement_count"
             ],
             "additionalProperties": false
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "name",
           "location",
-          "metrics"
+          "metrics",
+          "error"
         ],
         "additionalProperties": false
       }

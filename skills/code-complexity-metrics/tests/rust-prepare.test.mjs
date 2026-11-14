@@ -22,7 +22,7 @@ test('step 2: full expression lists, nested delimiters, and unsupported DSL', as
  for(const content of ['', '/* comment */', 'a,', 'f::<(u8,u8)>(x), |a,b| (a,b)', 'outer![inner!{load()}]', '"fake // x()"']) {
   const source=`fn f(){ m!(${content}); }`; const p=await prepared(source); assert.deepEqual(p.diagnostics,[],content);
  }
- for(const content of ['value; count', 'a, broken +']) {
+ for(const content of ['value; => count', 'a, broken +']) {
   const p=await prepared(`fn f(){ m!(${content}); }`); assert.ok(p.diagnostics.length,content);
  }
 });
@@ -30,7 +30,7 @@ test('step 2: wrapper rejects injected statements', async () => {
  const p=await parse('fn f(){}','rust'); try { assert.equal(parseMacroArguments(p.tree.language, '); injected(); __capture(', 0, () => ({})), null); } finally { p.dispose(); }
 });
 test('step 2: functions, closure ownership and module uncertainty', async () => {
- const source='unknown!(value; count); fn good(){ m!(|| { work() }); macro_rules! x { () => { fn hidden(){} } } }'; const p=await prepared(source), all=walk(p.tree);
+ const source='unknown!(value; => count); fn good(){ m!(|| { work() }); macro_rules! x { () => { fn hidden(){} } } }'; const p=await prepared(source), all=walk(p.tree);
  assert.deepEqual(p.functions.map(f=>f.name),['good']); const good=p.functions[0]; const closure=all.find(n=>n.type==='closure_expression'); assert.equal(p.ownerByNode.get(closure),good.id); assert.ok(p.diagnostics.some(d=>d.owner===null && d.affectsFunctionDiscovery));
  const module=await prepared('m!({ fn inner() {} });'); assert.deepEqual(module.functions.map(f=>f.name),['inner']);
 });
@@ -54,7 +54,7 @@ test('review 02: malformed original macro delimiters preserve parse diagnostics 
  }
 });
 test('review 02: presentation covers unsupported macros and excluded definitions', async () => {
- for(const source of ['fn f(){ m!{r#"one\n// literal"# ; count}; }', 'fn f(){ m!{value; /* actual\n comment */ count}; }', 'fn f(){ macro_rules! x { () => { /* actual\n comment */ r#"one\n// literal"# }; } }']) {
+ for(const source of ['fn f(){ m!{r#"one\n// literal"# ; => count}; }', 'fn f(){ m!{value; /* actual\n comment */ => count}; }', 'fn f(){ macro_rules! x { () => { /* actual\n comment */ r#"one\n// literal"# }; } }']) {
   const p=await prepared(source); const expectsComment=source.includes('/* actual');
   assert.equal(p.presentation.comments.some(r=>text(source,r).startsWith('/* actual')),expectsComment);
   assert.ok(!p.presentation.comments.some(r=>text(source,r).startsWith('// literal')));

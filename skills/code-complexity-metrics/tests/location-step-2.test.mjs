@@ -16,7 +16,7 @@ test('projects and sorts diagnostics numerically before filtering, with file len
   const input = { functions, diagnostics, sources: new Map([[path.resolve('a.js'), { source: '😀' }]]), files: [], hasErrors: true, functionDiscoveryComplete: false };
   const report = makeReport(input, 'no-match').report;
   assert.deepEqual(report.functions, []);
-  assert.deepEqual(Object.keys(makeReport(input).report.functions[0]), ['name','location','metrics']);
+  assert.deepEqual(Object.keys(makeReport(input).report.functions[0]), ['name','location','metrics','error']);
   assert.deepEqual(report.diagnostics, [
     { error:'file: problem',name:null,location:'a.js:0:0:2' },
     { error:'a: problem',name:'short',location:'a.js:2:2:1' },
@@ -27,13 +27,7 @@ test('projects and sorts diagnostics numerically before filtering, with file len
   ]);
   assert.deepEqual(makeReport({ ...input, diagnostics: [...diagnostics].reverse(), functions: [...functions].reverse() }, 'no-match').report, report);
   const mixed = [...diagnostics, { ...diag(null,'READ_ERROR'), category:'input' }, { ...diag(null,'GLOBAL',null), category:'internal' }];
-  assert.throws(() => makeReport({ ...input, diagnostics: mixed }, 'no-match'), error => {
-    assert.match(error.message, /a\.js:2:2:1: a: problem \(short\)/);
-    assert.match(error.message, /a\.js:0:0:2: READ_ERROR: problem/);
-    assert.match(error.message, /(?:^|\n)GLOBAL: problem(?:\n|$)/);
-    assert.doesNotMatch(error.message, /<global>|null:0:0/);
-    return true;
-  });
+  assert.equal(makeReport({ ...input, diagnostics: mixed }, 'no-match').report.diagnostics.length,7);
 });
 test('computes each outer location once even for multiple filtered diagnostics', () => {
  const outer = rec('owner',2,3,7,'outer');
@@ -75,7 +69,7 @@ test('CLI preserves partial output and refuses publication on errors', async () 
   assert.equal(absentUnsupported.status,1); assert.equal(absentUnsupported.stdout,''); assert.match(absentUnsupported.stderr,/READ_ERROR/);
   await writeFile(path.join(dir,'nested.js'),'function outer(){ function nested(){ const x = ; } }');
   const mixed = run(dir,['--path','nested.js','--path','missing.js','--path','other.xyz']);
-  assert.equal(mixed.status,1); assert.equal(mixed.stdout,'');
+  assert.equal(mixed.status,1); assert.equal(JSON.parse(mixed.stdout).functions.length,1);
   assert.match(mixed.stderr,/nested\.js:1:1:52: javascript-parse-error:.*\(outer\)/);
   assert.match(mixed.stderr,/missing\.js:0:0:null: READ_ERROR/);
   assert.match(mixed.stderr,/other\.xyz:0:0:null: UNSUPPORTED_LANGUAGE/);
@@ -88,8 +82,7 @@ test('CLI preserves partial output and refuses publication on errors', async () 
     if (target.includes('existing')) await writeFile(path.join(dir,target),'untouched');
     const r = run(dir,['--path','good.js','--path',glob,'--output',target]);
     assert.equal(r.status,1); assert.equal(r.stdout,''); assert.match(r.stderr,/INPUT_GLOB_ERROR/);
-    if (target.includes('existing')) assert.equal(await readFile(path.join(dir,target),'utf8'),'untouched');
-    else await assert.rejects(readFile(path.join(dir,target)), {code:'ENOENT'});
+    assert.equal(JSON.parse(await readFile(path.join(dir,target),'utf8')).functions[0].name,'good');
    }
   }
   const emptyGlob = run(dir,['--path','missing/*.js']);
@@ -102,8 +95,7 @@ test('CLI preserves partial output and refuses publication on errors', async () 
    for (const bad of ['bad.js','missing.js','[z-a]']) {
     const r = run(dir,['--path','good.js','--path',bad,'--output',target]);
     assert.equal(r.status,1, bad); assert.equal(r.stdout,''); assert.notEqual(r.stderr,'');
-    if (target.startsWith('existing')) assert.equal(await readFile(path.join(dir,target),'utf8'),'untouched');
-    else await assert.rejects(readFile(path.join(dir,target)), { code:'ENOENT' });
+    assert.equal(JSON.parse(await readFile(path.join(dir,target),'utf8')).functions[0].name,'good');
    }
   }
  } finally { await rm(dir,{recursive:true,force:true}); }

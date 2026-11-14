@@ -27,7 +27,7 @@ const examples=[
  ];
 for(const [s,expected] of examples) test(`Rust example: ${s}`, async()=>{ const p=await run(s); assert.deepEqual(p.diagnostics,[]); assert.deepEqual(total(p),expected); });
 test('Rust: argument boundaries, token locations, owner and preserved diagnostic',async()=>{
- const s='fn f(){m!(a&&b,c&&d); bad!(value; count);}'; const p=await run(s), all=walk(p.tree), ops=all.filter(n=>n.type==='&&');
+ const s='fn f(){m!(a&&b,c&&d); bad!(value; => count);}'; const p=await run(s), all=walk(p.tree), ops=all.filter(n=>n.type==='&&');
  assert.deepEqual(ops.map(n=>n.score),[{cognitive:1,cyclomatic:1,statements:0},{cognitive:1,cyclomatic:1,statements:0}]);
  for(const op of ops) {assert.equal(s.slice(op.startIndex,op.endIndex),'&&'); assert.equal(p.ownerByNode.get(op),p.functions[0].id);}
  assert.equal(p.diagnostics.length,1); assert.equal(p.diagnostics[0].owner,p.functions[0].id); assert.deepEqual(p.diagnostics[0].affectedMetrics,['cognitive','cyclomatic','statements']);

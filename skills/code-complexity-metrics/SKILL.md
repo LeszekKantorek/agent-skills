@@ -34,10 +34,11 @@ Options:
   --format <format>        json (default), markdown, or csv.
   --filter "prefix|other"  Select outer names by case-sensitive prefixes.
                            Separate alternative prefixes with |.
-  --explain                Markdown with scoring comments beside the source.
-                           No summary table. Comments align within each outer.
-                           Overrides --format and replaces original comments
-                           in the report copy.
+  --explain                Markdown with scoring annotations for each outer.
+                           Overrides --format and omits the summary table.
+                           Unsafe annotations appear outside the code block.
+                           Original comments are omitted when parsing succeeds;
+                           a parse error preserves the complete source text.
   --output "<file>"        Write the report to a file instead of standard output.
 
 Examples:
@@ -52,18 +53,15 @@ Notes:
 * All requested or matched files are analyzed, without additional exclusions.
 * Unmatched globs add no files. With no input files, the report is empty.
 * CSV begins with three # metadata lines before its header.
-* Function records contain `name`, `location`, and `metrics`. Locations use
+* Function records contain `name`, `location`, `metrics`, and `error`. Locations use
   `file:line:column:length`; read the three numeric fields from the right.
   Paths are relative to the working directory when possible. Lines and columns
   start at 1; columns and lengths use UTF-16 units.
-* A parse or unsupported-syntax error produces a partial report on standard
-  output when `--output` is absent. CSV diagnostics go to standard error.
-* With `--output`, an error leaves the destination unchanged and sends the
-  diagnostic to standard error. Input and internal errors prevent publication.
+* Every error is reported on standard error and results in exit code 1. When at least one input is analyzed successfully or confirmed to have an unsupported language, a partial report is published to standard output or atomically to `--output`. A failed write leaves the destination unchanged. Input aliases are protected.
+* Function metrics exclude all contributions assigned to physical lines covered by diagnostics. `Error` identifies the first relevant diagnostic; an empty cell or JSON null means no relevant error. Discovery completeness remains a separate field.
 
-Exit codes:
 * 0  No error.
-* 1  An error occurred. Parse and unsupported-syntax errors can yield a partial report without --output.
+* 1  An error occurred. A partial report can be published when a reliable input result is available.
 ```
 
 ## Use the results in code review
@@ -93,7 +91,7 @@ Keep the metrics separate when selecting code to inspect:
 
 2. Run `--explain` for the selected outer using its file and name prefix.
 
-   * Inspect the scored constructs and the original source, including comments omitted from the explanation.
+   * Inspect the scored constructs and the original source, including comments that may be omitted from the explanation.
    * Nested functions and closures contribute to the outer's result.
 
 3. Evaluate those constructs against the function's responsibilities and expected behavior during the separate code review.
@@ -108,4 +106,4 @@ Keep the metrics separate when selecting code to inspect:
 * Explain each metric's change using the changed constructs and required behavior.
 * When code moves into another outer, inspect both functions. A lower score in the original function can reflect redistribution.
 * After an authorized refactoring, rerun measurements and relevant behavior tests. A lower score alone does not prove improvement.
-* Treat `null` as unavailable. Identify incomplete runs before drawing conclusions from missing functions or comparing reports.
+* Identify incomplete runs and functions with `Error` before comparing results. Metrics with an error exclude affected physical lines.

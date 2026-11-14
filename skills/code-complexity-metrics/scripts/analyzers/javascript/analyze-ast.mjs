@@ -85,9 +85,9 @@ export function prepare(parsedTree, source, fileId) {
   for (let row=0; row<starts.length; row++) {
     const end=ends[row];
     while(cursor<unsafe.length && unsafe[cursor].startIndex<end) furthest=Math.max(furthest,unsafe[cursor++].endIndex);
-    lineAnnotations.push({row,contentEndIndex:end,endIndex:furthest>end ? null : end});
+    lineAnnotations.push({row,contentEndIndex:end,endIndex:furthest>end || parsedTree.rootNode.hasError ? null : end});
   }
-  return {tree,functions:records,ownerByNode,diagnostics,presentation:{comments,unsafeCommentRanges:unsafe,lineAnnotations}};
+  return {tree,functions:records,ownerByNode,diagnostics,presentation:{comments:parsedTree.rootNode.hasError ? [] : comments,unsafeCommentRanges:unsafe,lineAnnotations}};
 }
 
 

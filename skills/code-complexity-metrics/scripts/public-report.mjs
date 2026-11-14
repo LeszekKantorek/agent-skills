@@ -42,6 +42,7 @@ function displayPath(fileId) {
   return path.sep === '\\' ? displayed.replaceAll('\\', '/') : displayed;
 }
 const errorText = diagnostic => [diagnostic.code, diagnostic.message].filter(Boolean).join(': ');
+const globalDiagnosticText = diagnostic => publicText(errorText(diagnostic));
 function compareDiagnostics(a, b) {
   return compare(a.path, b.path) || a.row - b.row || a.column - b.column
     || (a.length === null ? b.length === null ? 0 : 1 : b.length === null ? -1 : a.length - b.length)
@@ -70,15 +71,12 @@ export function makeReport(aggregate, filter) {
     const length = aggregate.sources.get(diagnostic.fileId)?.source?.length ?? null;
     return { path, row: 0, column: 0, length, location: `${path}:0:0:${length}`, name: null, error: publicText(errorText(diagnostic)) };
   }).sort(compareDiagnostics);
-  if (aggregate.diagnostics.some(d => d.category === 'input' || d.category === 'internal')) {
-    throw Error(diagnostics.map(({ location, error, name }) =>
-      `${location === null ? '' : `${location}: `}${error}${name === null ? '' : ` (${name})`}`).join('\n'));
-  }
-  const publicDiagnostics = diagnostics.map(({ error, name, location }) => ({ error, name, location }));
+  const publicDiagnostics = diagnostics.filter(d => d.location !== null).map(({ error, name, location }) => ({ error, name, location }));
   const functions = selected.map(record => ({
     name: functionLocationsById.get(record.id).name,
     location: functionLocationsById.get(record.id).location,
     metrics: publicMetrics(record.metrics),
+    error: record.error ? publicText(errorText(record.error)) : null,
   }));
   return {
     report: {
@@ -125,10 +123,10 @@ export function diagnosticText(report) {
 }
 export function csv(report) {
   const lines = ['# Code Complexity Metrics', `# ${meta(report)}`, `# ${version(report)}`,
-    'Name,Location,Cognitive,Cyclomatic,Statements'];
+    'Name,Location,Cognitive,Cyclomatic,Statements,Error'];
   for (const record of report.functions) {
     const metrics = Object.values(record.metrics).map(value => value === null ? 'null' : value);
-    lines.push([record.name ?? '', record.location, ...metrics].map(csvCell).join(','));
+    lines.push([record.name ?? '', record.location, ...metrics, record.error].map(csvCell).join(','));
   }
   return lines.join('\n') + '\n';
 }
@@ -154,6 +152,7 @@ function renderExplain(record, aggregate) {
   const rows = new Set();
   for (let row = record.rootRange.startPosition.row + 1; row <= record.rootRange.endPosition.row + 1; row++) rows.add(row);
   for (const row of record.byRow.keys()) rows.add(row);
+  for (const row of record.errorRows?.keys() ?? []) rows.add(row);
   const groups = [];
   for (const row of [...rows].sort((a, b) => a - b)) {
     const last = groups.at(-1);
@@ -167,7 +166,7 @@ function renderExplain(record, aggregate) {
       const value = incomplete && !points?.[key] ? 'brak znanego wkładu' : points?.[key] ?? 0;
       const display = typeof value === 'number' && value > 0 ? `+${value}` : value;
       return `${metricLabels[index]}: ${display}${incomplete && points?.[key] ? ' (częściowe)' : ''}`;
-    }).join('; ');
+    }).join('; ') + (record.errorRows?.has(row) ? ` // error: ${record.errorRows.get(row).map(d => publicText(errorText(d))).join('; ')}` : '');
   }
   let output = '';
   for (const group of groups) {
@@ -196,9 +195,9 @@ export function markdown(report, selected, aggregate, explain = false) {
       output += renderExplain(selected[index], aggregate);
     }
   } else {
-    output += '| Name | Location | Cognitive | Cyclomatic | Statements |\n| --- | --- | ---: | ---: | ---: |\n';
+    output += '| Name | Location | Cognitive | Cyclomatic | Statements | Error |\n| --- | --- | ---: | ---: | ---: | --- |\n';
     for (const record of report.functions) {
-      output += `| ${cell(record.name ?? '(anonymous)')} | ${cell(record.location)} | ${label(record.metrics.cognitive_complexity)} | ${label(record.metrics.cyclomatic_complexity)} | ${label(record.metrics.statement_count)} |\n`;
+      output += `| ${cell(record.name ?? '(anonymous)')} | ${cell(record.location)} | ${label(record.metrics.cognitive_complexity)} | ${label(record.metrics.cyclomatic_complexity)} | ${label(record.metrics.statement_count)} | ${cell(record.error ?? '')} |\n`;
     }
     output += '\n';
   }
@@ -208,3 +207,5 @@ export function markdown(report, selected, aggregate, explain = false) {
   }
   return output;
 }
+
+export { globalDiagnosticText };

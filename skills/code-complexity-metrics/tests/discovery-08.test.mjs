@@ -16,7 +16,7 @@ test('E08 module macro discovery and independent outer survive every format and 
   const report=JSON.parse(json.stdout);
   assert.equal(report.summary.function_discovery_complete,false);
   assert.deepEqual(report.functions.map(f=>f.name),['good']);
-  assert.deepEqual(Object.values(report.functions[0].metrics),[0,1,1]);
+  assert.deepEqual(Object.values(report.functions[0].metrics),[0,0,0]);
   assert.equal(report.diagnostics.length,1);
   const d=report.diagnostics[0];
   assert.match(d.error,/^rust-unsupported-macro-arguments:/);assert.equal(d.name,null);assert.equal(d.location,`input.rs:0:0:${source.length}`);

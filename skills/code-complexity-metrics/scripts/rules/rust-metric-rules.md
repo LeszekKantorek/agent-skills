@@ -323,14 +323,18 @@ Macro composition requirements govern all three metrics:
 
 Argument recognition follows syntax, not an enumeration of macro names or call combinations:
 
-* Empty contents have no argument operations. A complete Rust expression, or a complete comma-separated expression list with an optional trailing comma, supplies ordinary arguments.
+* Empty contents have no argument operations. A complete Rust expression or a complete list separated by commas or semicolons supplies ordinary arguments. A list uses one separator kind at its own level; a comma list may have a trailing comma. Separators within an expression remain part of that expression. A semicolon does not imply repetition or add a point.
+* If the whole input is not an expression list, a complete expression followed by a structural pattern with written fields or `..` and an optional guard is recognized as distinct roles. The expression and guard have independent ordinary argument contexts. The pattern, its guard marker and separator contribute no operation of their own; explicit operations within the expressions still count. A parser-only `match` wrapper contributes nothing.
+* A complete list of `PAT = EXPR => BODY` members exposes the pattern, input expression, and body expression as distinct roles. Members are comma-separated, with an optional trailing comma; a complete block body may omit the comma. Input and body use separate ordinary argument contexts. Binding, arrow, and member contribute no operation, selection, or added depth. A body block and written transfers follow their ordinary rules.
+* A complete comma-separated list containing at least one type that is not a complete expression exposes its members as types. Embedded expressions retain ordinary scoring; expression lists take precedence.
+* A complete list of initialized const and static value declarations exposes the written declarations with their types and initializers. Declarators, blocks, calls and nested functions follow their ordinary rules; parser-only wrappers contribute nothing. Incomplete or mixed lists remain unsupported.
 * Recognize each whole argument recursively, including nested macros. Use parsed fragment boundaries rather than splitting text at every comma.
 * Invocation delimiters, grouping parentheses, and argument separators add no operations. An actual block expression inside the argument list follows the ordinary block rules. All invocation delimiter forms follow the same principle.
 * Other macro input grammars require structural recognition in the Rust analyzer. For example, a repetition form can expose its value and count expressions as Analyze AST children. The metric passes apply ordinary rules to those children; recognition defines no separate metric formula.
 * Do not infer calls by searching token text for identifiers followed by parentheses. Patterns, quoted templates, and custom macro languages can resemble executable expressions.
 * When the input cannot be classified completely, apply the shared coverage rules. Preserve the known invocation contribution for explanation, but do not publish a partial sum as a complete metric.
 
-A recognized macro invocation alone does not make a metric unavailable. Unsupported argument syntax can make affected metrics unavailable; it must not silently contribute zero.
+A recognized macro invocation alone does not make a metric incomplete. Unsupported argument syntax produces a diagnostic; the reported totals exclude the affected physical lines under the shared aggregation rule.
 
 Derived examples demonstrate composition rather than additional rules:
 

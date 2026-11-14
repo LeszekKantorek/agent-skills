@@ -24,10 +24,10 @@ function valid(s, v) {
   }
   return true;
 }
-const complete = { version: '1.0.0', summary: { files: 1, functions_found: 1, functions_presented: 1, function_discovery_complete: true, has_errors: false }, files: [{ fileId: '/x.js', analyzed: true, functionDiscoveryComplete: true }], functions: [{ name: 'f', location: 'x.js:1:1:2', metrics: { cognitive_complexity: 0, cyclomatic_complexity: 1, statement_count: 2 } }], diagnostics: [{ error: 'X: x', name: 'f', location: 'x.js:1:1:2' }] };
+const complete = { version: '1.0.0', summary: { files: 1, functions_found: 1, functions_presented: 1, function_discovery_complete: true, has_errors: false }, files: [{ fileId: '/x.js', analyzed: true, functionDiscoveryComplete: true }], functions: [{ name: 'f', location: 'x.js:1:1:2', metrics: { cognitive_complexity: 0, cyclomatic_complexity: 1, statement_count: 2 }, error: null }], diagnostics: [{ error: 'X: x', name: 'f', location: 'x.js:1:1:2' }] };
 test('schema closes all report objects and validates required fields and types', () => {
   const empty = structuredClone(complete); empty.summary = { files: 0, functions_found: 0, functions_presented: 0, function_discovery_complete: true, has_errors: false }; empty.files = []; empty.functions = []; empty.diagnostics = [];
-  const partial = structuredClone(complete); partial.functions[0].metrics.statement_count = null; partial.functions[0].name = null; partial.diagnostics[0] = { error: 'X', name: null, location: 'x.js:0:0:null' }; partial.summary.has_errors = true;
+  const partial = structuredClone(complete); partial.functions[0].metrics.statement_count = 0; partial.functions[0].error = 'X'; partial.functions[0].name = null; partial.diagnostics[0] = { error: 'X', name: null, location: 'x.js:0:0:null' }; partial.summary.has_errors = true;
   for (const report of [empty, complete, partial]) assert.ok(valid(schema, report));
   let count = 0;
   function check(s, value, parts) {
@@ -36,7 +36,7 @@ test('schema closes all report objects and validates required fields and types',
     for (const key of s.required) {
       for (const mutation of ['missing', 'wrong']) {
         const copy = structuredClone(complete); let parent = copy; for (const part of parts) parent = parent[part];
-        if (mutation === 'missing') delete parent[key]; else parent[key] = typeof value[key] === 'string' ? 42 : 'wrong';
+        if (mutation === 'missing') delete parent[key]; else parent[key] = value[key] === null || typeof value[key] === 'string' ? 42 : 'wrong';
         assert.equal(valid(schema, copy), false, `${mutation} ${[...parts, key].join('.')}`);
       }
       count++; check(s.properties[key], value[key], [...parts, key]);
@@ -61,7 +61,7 @@ test('CLI uses module package version in all formats independently of cwd', asyn
   try {
     await writeFile(path.join(dir, 'package.json'), JSON.stringify({ version: '9.8.7' }));
     await writeFile(path.join(dir, 'good.js'), 'function f(){if(x){work();}}');
-    await writeFile(path.join(dir, 'partial.rs'), 'fn f(){unknown!(a; b);}');
+    await writeFile(path.join(dir, 'partial.rs'), 'fn f(){unknown!(a; => b);}');
     const cli = fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
     assert.equal(pkg.version, '1.0.0'); assert.equal(lock.version, pkg.version); assert.equal(lock.packages[''].version, pkg.version);
     for (const args of [[], ['--path', 'good.js'], ['--path', 'partial.rs']]) {
@@ -95,6 +95,6 @@ test('all formats read a changed version from an isolated package', async () => 
       assert.deepEqual(lines.slice(0, 6), ['# Code Complexity Metrics', '', summary, '', 'Version: 7.11.13', '']);
     }
     const lines = run(['--format', 'csv']).split('\n');
-    assert.deepEqual(lines.slice(0, 4), ['# Code Complexity Metrics', `# ${summary}`, '# Version: 7.11.13', 'Name,Location,Cognitive,Cyclomatic,Statements']);
+    assert.deepEqual(lines.slice(0, 4), ['# Code Complexity Metrics', `# ${summary}`, '# Version: 7.11.13', 'Name,Location,Cognitive,Cyclomatic,Statements,Error']);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

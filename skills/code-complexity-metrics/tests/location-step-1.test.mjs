@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -99,7 +99,8 @@ test('CLI distinguishes missing namespaced files from namespaced globs', { skip:
       for (const inputs of [['--path', missing], ['--path', 'f.js', '--path', missing]]) {
         const result = run([...inputs, '--output', target]);
         assert.equal(result.status, 1); assert.equal(result.stdout, ''); assert.match(result.stderr, /READ_ERROR/);
-        if (target === 'existing.json') assert.equal(await readFile(path.join(dir, target), 'utf8'), 'old report');
+        if (inputs.length > 2) assert.equal(JSON.parse(await readFile(path.join(dir, target), 'utf8')).functions[0].name,'f');
+        else if (target === 'existing.json') assert.equal(await readFile(path.join(dir, target), 'utf8'), 'old report');
         else await assert.rejects(readFile(path.join(dir, target)), { code: 'ENOENT' });
       }
     }

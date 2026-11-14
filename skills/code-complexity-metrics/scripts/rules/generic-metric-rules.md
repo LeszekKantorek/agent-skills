@@ -19,7 +19,7 @@ The complete scoring profile has the following requirements:
 * Each scored operation contributes once per metric, regardless of reachability or execution count. One syntax construct can contain several operations. Nested bodies contribute even when uncalled.
 * Equivalent constructs and control-flow structures have the same scores across languages. Each language analyzer applies this requirement to its syntax.
 * Syntax without an equivalent does not require an artificial counterpart. Arbitrary semantically equivalent programs need not have the same scores.
-* A complete metric is a nonnegative integer. An unavailable metric is `null`. Explain unsupported syntax separately from the numeric value; do not represent unknown contributions as zero.
+* A complete metric is a nonnegative integer. A result with an error is the known sum after excluding all contributions on affected physical lines; it is not a complete metric.
 * The three metrics are independent; points in one metric do not change either of the others.
 * Reference totals are expectations derived from the rules, not a test execution report.
 
@@ -84,9 +84,9 @@ Nested function bodies contribute through their written definitions. A call neve
 
 Explicitly excluded syntax is outside the profile's measurement scope. Unsupported syntax is within that scope but cannot yet be classified. These cases are distinct from a recognized operation with zero contribution.
 
-When unsupported syntax can affect a metric, that metric is unavailable for the owning outer. Other metrics remain available only if their contributions can be established independently. Identify the source span and unsupported category in diagnostic output; a partial sum is not a complete score.
+Identify the source span and unsupported category in diagnostic output. A partial sum is not a complete score.
 
-The analyzer records unsupported syntax in diagnostics separately from numeric node scores. Initial zero values do not establish completeness. Aggregation uses diagnostics to mark affected metrics as `null` while retaining known local contributions for explanation.
+The analyzer records unsupported syntax in diagnostics separately from numeric node scores. Aggregation excludes every contribution on physical lines covered by diagnostic ranges from all three totals, including contributions belonging to other functions. A half-open range covers the rows of its source units; an empty range covers the insertion row. Explain uses the same projection; discovery completeness remains separate. A function error is the first relevant diagnostic by source position, code and message. An unlocated diagnostic owned by the function follows located diagnostics and is ordered by code and message; it does not mask a row.
 
 ## Cyclomatic Complexity
 

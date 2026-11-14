@@ -47,5 +47,5 @@ test('R123-02: attributed module closure is discovered; incomplete lists remain 
  assert.deepEqual(p.functions.map(f=>f.id),['["file",0]','["file",1]']);
  assert.equal(p.ownerByNode.get(macro),null); assert.equal(p.ownerByNode.get(closure),p.functions[0].id);
  assert.deepEqual(score(closure),[0,1,0]); assert.equal(closure.startPosition.row,0); assert.equal(p.functions[1].root.startPosition.row,1);
- for(const content of ['#[cfg(all())]','a, #[cfg(all())]','a; b']) {const q=await run(`fn f(){m!(${content});}`); assert.ok(q.diagnostics.some(d=>d.code==='rust-unsupported-macro-arguments')); assert.equal(walk(q.tree).find(n=>n.type==='macro_invocation').children.filter(n=>n.field==='argument').length,0);}
+ for(const content of ['#[cfg(all())]','a, #[cfg(all())]','a; => b']) {const q=await run(`fn f(){m!(${content});}`); assert.ok(q.diagnostics.some(d=>d.code==='rust-unsupported-macro-arguments')); assert.equal(walk(q.tree).find(n=>n.type==='macro_invocation').children.filter(n=>n.field==='argument').length,0);}
 });

@@ -144,11 +144,11 @@ for (const [language, file, source, expected] of cases) {
         } else if (format === 'markdown') {
           const row = output.stdout.split('\n').find(line => line.startsWith('| f |'));
           assert.ok(row);
-          assert.deepEqual(row.split('|').slice(-4, -1).map(cell => Number(cell.trim())), expected);
+          assert.deepEqual(row.split('|').slice(-5, -2).map(cell => Number(cell.trim())), expected);
         } else if (format === 'csv') {
           const row = output.stdout.split('\n').find(line => line.startsWith('f,'));
           assert.ok(row);
-          assert.deepEqual(row.split(',').slice(-3).map(Number), expected);
+          assert.deepEqual(row.split(',').slice(-4, -1).map(Number), expected);
         } else {
           const annotation = `${source} // Cognitive: +${expected[0]}; Cyclomatic: +${expected[1]}; Statements: +${expected[2]}`
             .replace('Cognitive: +0', 'Cognitive: 0');

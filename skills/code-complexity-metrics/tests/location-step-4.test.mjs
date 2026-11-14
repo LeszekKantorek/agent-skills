@@ -106,11 +106,9 @@ test('normalizes the entire control range and diagnostics that abort publication
   const input = fixture(controls);
   assert.equal(makeReport(input).report.functions[0].name, expected);
   input.diagnostics.push({ owner: 'id', code: 'fatal\n\\n', message: controls, category: 'internal' });
-  assert.throws(() => makeReport(input), error => {
-    assert.ok(error.message.includes(String.raw`fatal\n\\n: ` + expected));
-    assert.ok(error.message.includes(` (${expected})`));
-    return true;
-  });
+  const d = makeReport(input).report.diagnostics.find(d => d.error.startsWith('fatal'));
+  assert.equal(d.error, String.raw`fatal\n\\n: ` + expected);
+  assert.equal(d.name, expected);
 });
 
 test('ownerless file diagnostics normalize their path exactly once', () => {

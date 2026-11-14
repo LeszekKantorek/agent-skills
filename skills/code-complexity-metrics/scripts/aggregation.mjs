@@ -138,8 +138,36 @@ export function aggregate(fileResults, globalDiagnostics=[]) {
     for (const d of analysisDiagnostics) { const key=diagnosticKey(d), i=remaining.indexOf(key); if (i<0) diagnostics.push(d); else remaining.splice(i,1); }
     if (error) diagnostics.push({code:'INVALID_ANALYSIS_CONTRACT',category:'internal',message:String(error),fileId:file.fileId,range:null,owner:null,affectedMetrics:[],affectsFunctionDiscovery:true});
     for (const r of records) r.fileId=file.fileId;
-    const byId=new Map(records.map(r=>[r.id,r]));
-    for (const d of diagnostics) { const record=byId.get(d.owner); if(record) for(const k of d.affectedMetrics) record.metrics[k]=null; }
+    // Project scores only after analysis, using physical source rows shared by all owners.
+    const masks = new Map();
+    const located = diagnostics.filter(d => d.range).sort((a,b) =>
+      a.range.startIndex-b.range.startIndex || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0) || (a.message < b.message ? -1 : a.message > b.message ? 1 : 0));
+    for (const d of located) {
+      const r=d.range, first=r.startPosition.row;
+      // A half-open end at the beginning of a line excludes that line.
+      const last=r.endIndex===r.startIndex ? first : r.endPosition.row-(r.endPosition.column===0 ? 1 : 0);
+      for (let row=first; row<=last; row++) {
+        if (!masks.has(row+1)) masks.set(row+1,[]);
+        masks.get(row+1).push(d);
+      }
+    }
+    for (const record of records) {
+      const first=record.rootRange.startPosition.row+1;
+      const r=record.rootRange;
+      const last=r.endIndex===r.startIndex ? first : r.endPosition.row+1-(r.endPosition.column===0 ? 1 : 0);
+      const touched=new Set();
+      for (const [row,ds] of masks) if (row>=first && row<=last || record.byRow.has(row)) for (const d of ds) touched.add(d);
+      const relevant=located.filter(d => d.owner===record.id || touched.has(d));
+      const unlocated=diagnostics.filter(d => !d.range && d.owner===record.id).sort((a,b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0) || (a.message < b.message ? -1 : a.message > b.message ? 1 : 0));
+      record.error=relevant[0] ?? unlocated[0] ?? null;
+      record.errorRows=new Map();
+      for (const [row,ds] of masks) {
+        if (row>=first && row<=last || record.byRow.has(row) || ds.some(d=>d.owner===record.id)) record.errorRows.set(row,ds);
+        if (record.byRow.has(row)) record.byRow.set(row,zero());
+      }
+      record.metrics=zero();
+      for (const score of record.byRow.values()) add(record.metrics,score);
+    }
     const functionDiscoveryComplete=analyzed && !diagnostics.some(d=>d.affectsFunctionDiscovery);
     result.files.push({fileId:file.fileId,analyzed,functionDiscoveryComplete}); result.functions.push(...records); result.diagnostics.push(...diagnostics); result.functionDiscoveryComplete &&=functionDiscoveryComplete;
   }

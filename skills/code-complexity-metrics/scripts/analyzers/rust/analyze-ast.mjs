@@ -1,5 +1,12 @@
 import {createAnalyzeNode, outerId} from '../contracts.mjs';
 import {parseMacroArguments} from './macro-arguments.mjs';
+import {parseMacroRecord} from './macro-record.mjs';
+import {parseMacroPattern} from './macro-pattern.mjs';
+import {parseMacroArms} from './macro-arms.mjs';
+import {parseMacroSemicolons} from './macro-semicolons.mjs';
+import {parseMacroTypes} from './macro-types.mjs';
+import {parseMacroDeclarations} from './macro-declarations.mjs';
+import {docAttributeProbe, collectExpressionDocs} from './macro-docs.mjs';
 
 export function prepare(parsedTree, source, fileId) {
   if (!parsedTree?.rootNode) throw new TypeError('Expected a parsed Rust tree');
@@ -57,11 +64,31 @@ export function prepare(parsedTree, source, fileId) {
           continue;
         }
         const a = child.startIndex + offset + 1, b = child.endIndex + offset - 1;
-        const recovered = parseMacroArguments(language, source.slice(a, b), a, (n, f, o) => {
+        const recover = (n, f, o) => {
           // Recovered syntax may expose lexical nodes hidden in the original token tree.
           lexical(n, o);
           return copy(n, f, o);
-        });
+        };
+        const parseProfiles = (token, text, shift, cb, make) => [
+          () => parseMacroArguments(language, text.slice(token.startIndex + shift + 1, token.endIndex + shift - 1), token.startIndex + shift + 1, cb),
+          () => parseMacroRecord(language, token, text, shift, cb, make),
+          () => parseMacroPattern(language, token, text, shift, cb),
+          () => parseMacroSemicolons(language, token, text, shift, cb),
+          () => parseMacroArms(language, token, text, shift, cb),
+          () => parseMacroTypes(language, token, text, shift, cb),
+          () => parseMacroDeclarations(language, token, text, shift, cb),
+        ];
+        const dummy = (_n, field) => ({field, children: []});
+        const dummyNode = (_type, field) => ({field, children: []});
+        const expressionDocs = new Set(), macroBoundaries = [];
+        const collect = (node, field, shift) => { collectExpressionDocs(node, shift, expressionDocs, macroBoundaries); return dummy(node, field); };
+        const probes = parseProfiles(child, source, offset, collect, dummyNode);
+        let profile = -1;
+        for (let i = 0; i < probes.length; i++) { expressionDocs.clear(); macroBoundaries.length = 0; if (probes[i]() !== null) { profile = i; break; } }
+        const valid = profile >= 0 && docAttributeProbe(language, child, source, offset,
+          (token, text, shift) => parseProfiles(token, text, shift, dummy, dummyNode)[profile]() !== null, expressionDocs, macroBoundaries);
+        const make = (type, field, start, end) => createAnalyzeNode({type, field, isNamed: true, ...range(start, end)});
+        const recovered = valid ? parseProfiles(child, source, offset, recover, make)[profile]() : null;
         if (recovered === null) issues.push({node: out, code: 'rust-unsupported-macro-arguments', category: 'unsupported', message: 'Macro arguments are not a complete expression list.'});
         else out.children.push(...recovered);
       } else out.children.push(copy(child, childField, offset, isDefinition, node.type === 'macro_definition', node));
@@ -105,8 +132,7 @@ export function prepare(parsedTree, source, fileId) {
     const start = lineStarts[row], rawEnd = row + 1 < lineStarts.length ? lineStarts[row + 1] - 1 : source.length;
     const end = row + 1 < lineStarts.length && rawEnd > start && source[rawEnd - 1] === '\r' ? rawEnd - 1 : rawEnd;
     while (nextRange < unsafeRanges.length && unsafeRanges[nextRange].startIndex < end) furthestEnd = Math.max(furthestEnd, unsafeRanges[nextRange++].endIndex);
-    lineAnnotations.push({row, contentEndIndex: end, endIndex: furthestEnd > end ? null : end});
+    lineAnnotations.push({row, contentEndIndex: end, endIndex: furthestEnd > end || parsedTree.rootNode.hasError ? null : end});
   }
-  return {tree, functions, ownerByNode, diagnostics, presentation: {comments: commentRanges, unsafeCommentRanges: unsafeRanges, lineAnnotations}};
+  return {tree, functions, ownerByNode, diagnostics, presentation: {comments: parsedTree.rootNode.hasError ? [] : commentRanges, unsafeCommentRanges: unsafeRanges, lineAnnotations}};
 }
-

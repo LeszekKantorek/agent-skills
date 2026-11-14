@@ -43,9 +43,11 @@ test('pinned clone glob scope covers both languages and remains deterministic',a
  const args=['--path',path.join(clone,'**','*.rs'),'--path',path.join(clone,'**','*.js')];
  const paths=await inputFiles([path.join(clone,'**','*.rs'),path.join(clone,'**','*.js')]);
  const before=await Promise.all(paths.map(hash));
- const a=run(...args),b=run(...args);assert.equal(a.status,1);assert.equal(b.status,1);assert.equal(a.stdout,b.stdout);
+ const a=run(...args),b=run(...args);assert.equal(a.status,0);assert.equal(b.status,0);assert.equal(a.stdout,b.stdout);
  const report=JSON.parse(a.stdout);
- assert.equal(report.summary.has_errors,true);assert.equal(report.summary.function_discovery_complete,false);assert.ok(report.diagnostics.some(d=>d.error.startsWith('rust-unsupported-macro-arguments:') && d.name!==null));
+ const owner=report.functions.find(f=>f.name==='native_owners_cannot_cross_threads_or_be_shared');
+ assert.ok(owner); assert.equal(owner.error,null); assert.deepEqual(owner.metrics,{cognitive_complexity:0,cyclomatic_complexity:1,statement_count:5});
+ assert.ok(!report.diagnostics.some(d=>d.name==='native_owners_cannot_cross_threads_or_be_shared'));
  assert.equal(report.summary.files,68);assert.equal(paths.filter(f=>f.endsWith('.rs')).length,34);assert.equal(paths.filter(f=>f.endsWith('.js')).length,34);
  assert.equal('analyzed_files' in report,false);
  assert.deepEqual(await Promise.all(paths.map(hash)),before);

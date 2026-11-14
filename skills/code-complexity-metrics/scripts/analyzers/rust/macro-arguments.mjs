@@ -3,8 +3,14 @@ import ts from '../../../vendor/tree-sitter/tree-sitter.js';
 const prefix = 'fn __fragment(){ __capture(\n';
 const suffix = '\n); }';
 
+// Definitions and nested invocation contents have their own handling.
+export function hasMetavariable(n, parent = null) {
+  if (n.type === 'macro_definition' || (n.type === 'token_tree' && parent?.type === 'macro_invocation')) return false;
+  return n.type === 'metavariable' || n.children.some(child => hasMetavariable(child, n));
+}
+
 // Parse the entire wrapper, not merely a valid prefix of its argument list.
-export function parseMacroArguments(language, content, contentStart, copy) {
+export function parseMacroArguments(language, content, contentStart, copy, {single = false} = {}) {
   const parser = new ts.Parser();
   let tree;
   try {
@@ -29,6 +35,7 @@ export function parseMacroArguments(language, content, contentStart, copy) {
       if (element.startIndex < start || element.endIndex > end) return null;
       if (element.type.endsWith('_comment')) { selected.push([element, null]); continue; }
       if (expectExpression) {
+        if (hasMetavariable(element)) return null;
         if (element.type === 'attribute_item') {
           selected.push([element, null]);
           pendingAttribute = true;
@@ -39,7 +46,7 @@ export function parseMacroArguments(language, content, contentStart, copy) {
         pendingAttribute = false;
         expectExpression = false;
       } else {
-        if (element.type !== ',') return null;
+        if (single || element.type !== ',') return null;
         expectExpression = true;
       }
     }
