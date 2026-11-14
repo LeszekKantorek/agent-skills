@@ -66,6 +66,7 @@ Notes:
 
 ## Use the results in code review
 
+* See the [Rust statement scorer case study](references/rust-statement-scorer-refactoring.md) for an example of choosing which metric to optimize.
 * Use the report to identify functions that need closer review and to track complexity changes between revisions.
 * The measurements describe syntax. They do not establish correctness, architectural quality, or runtime performance.
 
