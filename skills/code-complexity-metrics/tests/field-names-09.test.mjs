@@ -78,13 +78,12 @@ for (const [label, source, expectedName, fragment, expected] of cases) {
       }
       const report = JSON.parse(json.stdout), filtered = JSON.parse(selected.stdout);
       assert.equal(report.functions.length, 1);
-      assert.equal(report.functions[0].id, id);
+      assert.deepEqual(Object.keys(report.functions[0]), ['name', 'location', 'metrics']);
+      assert.equal(report.functions[0].location, `input.js:1:${start + 1}:${fragment.length}`);
       assert.equal(report.functions[0].name, expectedName);
       assert.deepEqual(Object.values(report.functions[0].metrics), expected);
-      assert.equal(report.functions[0].range.startIndex, start);
-      assert.equal(report.functions[0].range.endIndex, end);
       assert.equal(filtered.functions.length, expectedName === null ? 0 : 1);
-      if (expectedName !== null) assert.equal(filtered.functions[0].id, id);
+      if (expectedName !== null) assert.equal(filtered.functions[0].location, `input.js:1:${start + 1}:${fragment.length}`);
       assert.ok(explain.stdout.includes(fragment));
       assert.match(explain.stdout, new RegExp(`Cyclomatic: \\+1; Statements: \\+${expected[2]}`));
     } finally {

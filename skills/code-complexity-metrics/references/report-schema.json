@@ -3,30 +3,9 @@
   "title": "Code Complexity Metrics report",
   "type": "object",
   "properties": {
-    "schema_version": {
-      "type": "string"
-    },
-    "rules_version": {
-      "type": "string"
-    },
-    "analyzer_version": {
-      "type": "string"
-    },
-    "parser": {
-      "type": "object",
-      "properties": {
-        "package": {
-          "type": "string"
-        },
-        "version": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "package",
-        "version"
-      ],
-      "additionalProperties": false
+    "version": {
+      "type": "string",
+      "minLength": 1
     },
     "summary": {
       "type": "object",
@@ -66,8 +45,8 @@
         "properties": {
           "fileId": {
             "type": "string",
-            "pattern": "^(?:[A-Za-z]:[\\\\/]|/|\\\\\\\\)",
-            "description": "Absolute normalized input path."
+            "pattern": "^(?:[A-Za-z]:(?:/|\\\\\\\\)|/|\\\\\\\\\\\\\\\\)(?:[^\\\\\\x00-\\x1F\\x7F-\\x9F\\u2028\\u2029]|\\\\\\\\|\\\\[rnt]|\\\\u(?:00(?:0[0-8BCEF]|1[0-9A-F]|7F|8[0-9A-F]|9[0-9A-F])|202[89]))*(?![\\s\\S])",
+            "description": "Absolute input path with presentation-encoded backslashes."
           },
           "analyzed": {
             "type": "boolean"
@@ -89,78 +68,15 @@
       "items": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "fileId": {
-            "type": "string",
-            "pattern": "^(?:[A-Za-z]:[\\\\/]|/|\\\\\\\\)",
-            "description": "Absolute normalized input path."
-          },
-          "range": {
-            "type": "object",
-            "required": [
-              "startIndex",
-              "endIndex",
-              "startPosition",
-              "endPosition"
-            ],
-            "properties": {
-              "startIndex": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "endIndex": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "startPosition": {
-                "type": "object",
-                "required": [
-                  "row",
-                  "column"
-                ],
-                "properties": {
-                  "row": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "column": {
-                    "type": "integer",
-                    "minimum": 1
-                  }
-                },
-                "additionalProperties": false
-              },
-              "endPosition": {
-                "type": "object",
-                "required": [
-                  "row",
-                  "column"
-                ],
-                "properties": {
-                  "row": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "column": {
-                    "type": "integer",
-                    "minimum": 1
-                  }
-                },
-                "additionalProperties": false
-              }
-            },
-            "additionalProperties": false
-          },
-          "location": {
-            "type": "string"
-          },
           "name": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "location": {
+            "type": "string",
+            "pattern": "^(?:[^\\\\\\x00-\\x1F\\x7F-\\x9F\\u2028\\u2029]|\\\\\\\\|\\\\[rnt]|\\\\u(?:00(?:0[0-8BCEF]|1[0-9A-F]|7F|8[0-9A-F]|9[0-9A-F])|202[89]))+:[1-9][0-9]*:[1-9][0-9]*:[0-9]+(?![\\s\\S])"
           },
           "metrics": {
             "type": "object",
@@ -196,11 +112,8 @@
           }
         },
         "required": [
-          "id",
-          "fileId",
-          "range",
-          "location",
           "name",
+          "location",
           "metrics"
         ],
         "additionalProperties": false
@@ -211,131 +124,50 @@
       "items": {
         "type": "object",
         "properties": {
-          "code": {
+          "error": {
             "type": "string"
           },
-          "category": {
-            "enum": [
-              "input",
-              "parse",
-              "unsupported",
-              "internal"
-            ]
-          },
-          "message": {
-            "type": "string"
-          },
-          "fileId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "pattern": "^(?:[A-Za-z]:[\\\\/]|/|\\\\\\\\)",
-            "description": "Absolute normalized input path; null denotes a global diagnostic."
-          },
-          "range": {
-            "anyOf": [
-              {
-                "type": "object",
-                "required": [
-                  "startIndex",
-                  "endIndex",
-                  "startPosition",
-                  "endPosition"
-                ],
-                "properties": {
-                  "startIndex": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "endIndex": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "startPosition": {
-                    "type": "object",
-                    "required": [
-                      "row",
-                      "column"
-                    ],
-                    "properties": {
-                      "row": {
-                        "type": "integer",
-                        "minimum": 1
-                      },
-                      "column": {
-                        "type": "integer",
-                        "minimum": 1
-                      }
-                    },
-                    "additionalProperties": false
-                  },
-                  "endPosition": {
-                    "type": "object",
-                    "required": [
-                      "row",
-                      "column"
-                    ],
-                    "properties": {
-                      "row": {
-                        "type": "integer",
-                        "minimum": 1
-                      },
-                      "column": {
-                        "type": "integer",
-                        "minimum": 1
-                      }
-                    },
-                    "additionalProperties": false
-                  }
-                },
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "owner": {
+          "name": {
             "type": [
               "string",
               "null"
             ]
           },
-          "affectedMetrics": {
-            "type": "array",
-            "items": {
-              "enum": [
-                "cognitive",
-                "cyclomatic",
-                "statements"
-              ]
-            },
-            "uniqueItems": true
-          },
-          "affectsFunctionDiscovery": {
-            "type": "boolean"
+          "location": {
+            "type": "string",
+            "pattern": "^(?:[^\\\\\\x00-\\x1F\\x7F-\\x9F\\u2028\\u2029]|\\\\\\\\|\\\\[rnt]|\\\\u(?:00(?:0[0-8BCEF]|1[0-9A-F]|7F|8[0-9A-F]|9[0-9A-F])|202[89]))+:(?:[1-9][0-9]*:[1-9][0-9]*:[0-9]+|0:0:(?:[0-9]+|null))(?![\\s\\S])"
           }
         },
         "required": [
-          "code",
-          "category",
-          "message",
-          "fileId",
-          "range",
-          "owner",
-          "affectedMetrics",
-          "affectsFunctionDiscovery"
+          "error",
+          "name",
+          "location"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "properties": {
+              "location": {
+                "pattern": "^(?:[^\\\\\\x00-\\x1F\\x7F-\\x9F\\u2028\\u2029]|\\\\\\\\|\\\\[rnt]|\\\\u(?:00(?:0[0-8BCEF]|1[0-9A-F]|7F|8[0-9A-F]|9[0-9A-F])|202[89]))+:[1-9][0-9]*:[1-9][0-9]*:[0-9]+(?![\\s\\S])"
+              }
+            }
+          },
+          {
+            "properties": {
+              "name": {
+                "type": "null"
+              },
+              "location": {
+                "pattern": "^(?:[^\\\\\\x00-\\x1F\\x7F-\\x9F\\u2028\\u2029]|\\\\\\\\|\\\\[rnt]|\\\\u(?:00(?:0[0-8BCEF]|1[0-9A-F]|7F|8[0-9A-F]|9[0-9A-F])|202[89]))+:0:0:(?:[0-9]+|null)(?![\\s\\S])"
+              }
+            }
+          }
+        ]
       }
     }
   },
   "required": [
-    "schema_version",
-    "rules_version",
-    "analyzer_version",
-    "parser",
+    "version",
     "summary",
     "files",
     "functions",

@@ -45,7 +45,7 @@ test('pinned clone glob scope covers both languages and remains deterministic',a
  const before=await Promise.all(paths.map(hash));
  const a=run(...args),b=run(...args);assert.equal(a.status,1);assert.equal(b.status,1);assert.equal(a.stdout,b.stdout);
  const report=JSON.parse(a.stdout);
- assert.equal(report.summary.has_errors,true);assert.equal(report.summary.function_discovery_complete,false);assert.ok(report.diagnostics.some(d=>d.code==='rust-unsupported-macro-arguments' && d.owner!==null));
+ assert.equal(report.summary.has_errors,true);assert.equal(report.summary.function_discovery_complete,false);assert.ok(report.diagnostics.some(d=>d.error.startsWith('rust-unsupported-macro-arguments:') && d.name!==null));
  assert.equal(report.summary.files,68);assert.equal(paths.filter(f=>f.endsWith('.rs')).length,34);assert.equal(paths.filter(f=>f.endsWith('.js')).length,34);
  assert.equal('analyzed_files' in report,false);
  assert.deepEqual(await Promise.all(paths.map(hash)),before);

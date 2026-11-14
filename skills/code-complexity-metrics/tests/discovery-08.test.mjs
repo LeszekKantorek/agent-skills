@@ -19,16 +19,14 @@ test('E08 module macro discovery and independent outer survive every format and 
   assert.deepEqual(Object.values(report.functions[0].metrics),[0,1,1]);
   assert.equal(report.diagnostics.length,1);
   const d=report.diagnostics[0];
-  assert.equal(d.code,'rust-unsupported-macro-arguments');assert.equal(d.owner,null);assert.equal(d.affectsFunctionDiscovery,true);
-  assert.deepEqual([d.range.startIndex,d.range.endIndex],[0,37]);
+  assert.match(d.error,/^rust-unsupported-macro-arguments:/);assert.equal(d.name,null);assert.equal(d.location,`input.rs:0:0:${source.length}`);
   for(const args of [[],['--filter','none']]) for(const format of ['json','markdown','csv','explain']) {
    const r=run(...args,...(format==='explain'?['--explain']:['--format',format]));
    assert.equal(r.status,1,`${format} ${args}`);
    if(format==='json') {
     const j=JSON.parse(r.stdout);assert.equal(j.summary.function_discovery_complete,false);
-    assert.equal(j.functions.length,args.length?0:1);assert.equal(j.diagnostics[0].owner,null);
-    assert.equal(j.diagnostics[0].code,d.code);assert.equal(j.diagnostics[0].affectsFunctionDiscovery,true);
-   } else assert.ok((format==='csv'?r.stderr:r.stdout).includes(d.code),`${format} diagnostic`);
+    assert.equal(j.functions.length,args.length?0:1);assert.deepEqual(j.diagnostics,[d]);
+   } else assert.ok((format==='csv'?r.stderr:r.stdout).includes('rust-unsupported-macro-arguments'),`${format} diagnostic`);
   }
  } finally {await rm(dir,{recursive:true,force:true})}
 });

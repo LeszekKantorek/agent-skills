@@ -31,7 +31,7 @@ for(const category of ['parse','unsupported']) for(const producer of ['analysis'
 });
 test('R09 unsupported extension retains input diagnostic without source range',()=>{
  const dir=mkdtempSync(path.join(tmpdir(),'metrics09-unsupported-'));
- try {const file=path.join(dir,'input.xyz');writeFileSync(file,'data');const cli=fileURLToPath(new URL('../scripts/measure.mjs',import.meta.url));const r=spawnSync(process.execPath,[cli,'--path',file],{encoding:'utf8'});assert.equal(r.status,1);assert.equal(r.stderr,'');const report=JSON.parse(r.stdout);assert.deepEqual(report.diagnostics.map(d=>[d.code,d.category,d.range,d.owner]),[['UNSUPPORTED_LANGUAGE','unsupported',null,null]]);assert.equal(report.files[0].analyzed,false);assert.equal(report.summary.function_discovery_complete,false)} finally {rmSync(dir,{recursive:true,force:true})}
+ try {const file=path.join(dir,'input.xyz');writeFileSync(file,'data');const cli=fileURLToPath(new URL('../scripts/measure.mjs',import.meta.url));const r=spawnSync(process.execPath,[cli,'--path',file],{encoding:'utf8'});assert.equal(r.status,1);assert.equal(r.stderr,'');const report=JSON.parse(r.stdout);assert.deepEqual(report.diagnostics.map(d=>[d.error.split(':')[0],d.name,d.location]),[['UNSUPPORTED_LANGUAGE',null,path.relative(process.cwd(),file).replaceAll('\\','/')+':0:0:null']]);assert.equal(report.files[0].analyzed,false);assert.equal(report.summary.function_discovery_complete,false)} finally {rmSync(dir,{recursive:true,force:true})}
 });
 
 test('R09 malformed global diagnostics preserve valid global and independent file',()=>{

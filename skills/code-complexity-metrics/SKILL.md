@@ -11,7 +11,7 @@ The [generic metric rules](scripts/rules/generic-metric-rules.md) define the tar
 
 Rules version: **2.0**. Recognized Rust macro arguments contribute recursively; unsupported syntax produces diagnostics.
 
-Use the version recorded in a report when describing measured behavior. The analyzer reports rules version 2.0. Derive new combinations from shared rules; request a new rule only for a genuine classification gap or conflict.
+Reports record the application version. The analyzer uses rules version 2.0. Derive new combinations from shared rules; request a new rule only for a genuine classification gap or conflict.
 
 ## Usage
 
@@ -52,10 +52,18 @@ Notes:
 * All requested or matched files are analyzed, without additional exclusions.
 * Unmatched globs add no files. With no input files, the report is empty.
 * CSV begins with three # metadata lines before its header.
+* Function records contain `name`, `location`, and `metrics`. Locations use
+  `file:line:column:length`; read the three numeric fields from the right.
+  Paths are relative to the working directory when possible. Lines and columns
+  start at 1; columns and lengths use UTF-16 units.
+* A parse or unsupported-syntax error produces a partial report on standard
+  output when `--output` is absent. CSV diagnostics go to standard error.
+* With `--output`, an error leaves the destination unchanged and sends the
+  diagnostic to standard error. Input and internal errors prevent publication.
 
 Exit codes:
 * 0  No error.
-* 1  An error occurred. A report can still contain results from valid files.
+* 1  An error occurred. Parse and unsupported-syntax errors can yield a partial report without --output.
 ```
 
 ## Use the results in code review

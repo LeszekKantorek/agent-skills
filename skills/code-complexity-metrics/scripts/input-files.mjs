@@ -28,17 +28,37 @@ export async function inputFiles(patterns, cwd = process.cwd(), errors = []) {
     return match ? match[1].split(',').flatMap(part => expand(pattern.slice(0, match.index) + part + pattern.slice(match.index + match[0].length))) : [pattern];
   });
   for (const pattern of patterns) {
-    if (!/[?*\[]/.test(pattern)) { files.add(path.resolve(cwd, pattern)); continue; }
+    const patternBody = pattern.slice(path.parse(pattern).root.length);
+    if (!/[?*\[]/.test(patternBody)) { files.add(path.resolve(cwd, pattern)); continue; }
+    // Validate the expanded spelling before resolve removes segments followed by '..'.
+    // On Windows both slash forms are path separators; POSIX backslashes are literal.
+    try {
+      const separators = path.sep === '\\' ? /[\\/]/ : /\//;
+      for (const segment of patternBody.split(separators)) {
+        if (segment !== '**' && /[?*\[]/.test(segment)) segmentExpression(segment);
+      }
+    } catch (error) { recordError(pattern, error); continue; }
     const absolute = path.resolve(cwd, pattern);
     const root = path.parse(absolute).root;
     const parts = absolute.slice(root.length).split(path.sep);
+    // Mark wildcard characters originating in cwd before resolving. Resolving
+    // both spellings applies the same lexical '..' operations to their segments.
+    let marker = '__ccm_literal_cwd__';
+    while (cwd.includes(marker) || pattern.includes(marker)) marker += '_';
+    const markedCwd = cwd.replace(/[?*\[]/g, character => `${marker}${character.charCodeAt(0)}_`);
+    const marked = path.resolve(markedCwd, pattern);
+    const markedRoot = path.parse(marked).root;
+    const syntaxParts = marked.slice(markedRoot.length).split(path.sep);
+    let expressions;
+    try { expressions = syntaxParts.map(part => part !== '**' && /[?*\[]/.test(part) ? segmentExpression(part) : null); }
+    catch (error) { recordError(absolute, error); continue; }
     async function walk(dir, index, ancestors) {
       if (index === parts.length) {
         try { if ((await stat(dir)).isFile()) files.add(path.resolve(dir)); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) recordError(dir, e); }
         return;
       }
       const part = parts[index];
-      if (part === '**') {
+      if (syntaxParts[index] === '**') {
         await walk(dir, index + 1, ancestors);
         let entries;
         try { entries = await readdir(dir, { withFileTypes: true }); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) recordError(dir, e); return; }
@@ -55,10 +75,10 @@ export async function inputFiles(patterns, cwd = process.cwd(), errors = []) {
           if (directory) await walk(child, index, next);
           else if (index === parts.length - 1) await walk(child, index + 1, next);
         }
-      } else if (/[?*\[]/.test(part)) {
+      } else if (expressions[index]) {
         let entries;
         try { entries = await readdir(dir, { withFileTypes: true }); } catch (e) { if (!['ENOENT', 'ENOTDIR'].includes(e.code)) recordError(dir, e); return; }
-        const match = segmentExpression(part);
+        const match = expressions[index];
         for (const entry of entries) if (match.test(entry.name)) await walk(path.join(dir, entry.name), index + 1, ancestors);
       } else await walk(path.join(dir, part), index + 1, ancestors);
     }

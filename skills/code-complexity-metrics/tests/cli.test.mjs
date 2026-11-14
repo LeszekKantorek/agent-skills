@@ -16,8 +16,8 @@ test('CLI preserves broken files and filters outer after analysis',async()=>{
   const r=run(dir,'--path','good.js','--path','bad.rs','--path','other.xyz','--filter','one');
   assert.equal(r.status,1); const report=JSON.parse(r.stdout);
   assert.deepEqual(report.summary,{files:3,functions_found:3,functions_presented:1,function_discovery_complete:false,has_errors:true});
-  assert.deepEqual(Object.keys(report.functions[0]),['id','fileId','range','location','name','metrics']);
-  assert.equal(report.functions[0].location,'good.js:1:1');
+  assert.deepEqual(Object.keys(report.functions[0]),['name','location','metrics']);
+  assert.equal(report.functions[0].location,'good.js:1:1:30');
   assert.deepEqual(report.functions[0].metrics,{cognitive_complexity:1,statement_count:2,cyclomatic_complexity:2});
   assert.equal('analyzed_files' in report,false);
  } finally {await rm(dir,{recursive:true,force:true})}
@@ -42,7 +42,7 @@ test('CSV format writes filtered metrics and explain still produces Markdown',as
   assert.equal(r.status,0);assert.equal(r.stdout,'');
   const csv=await readFile(path.join(dir,'report.csv'),'utf8');
   assert.match(csv,/^# Code Complexity Metrics\n# Files: 1; functions found: 2; functions presented: 1; function discovery complete: true; has errors: false\n/);
-  assert.match(csv,/Name,Location,Cognitive,Cyclomatic,Statements\nprocess,"a,b\.js:1:1",0,1,1\n$/);
+  assert.match(csv,/Name,Location,Cognitive,Cyclomatic,Statements\nprocess,"a,b\.js:1:1:27",0,1,1\n$/);
   const explained=run(dir,'--path','a,b.js','--format','csv','--explain');
   assert.equal(explained.status,0);assert.match(explained.stdout,/Files: 1; functions found: 2; functions presented: 2;/);assert.match(explained.stdout,/```javascript/);
  } finally {await rm(dir,{recursive:true,force:true})}
@@ -88,7 +88,7 @@ test('filter matches prefixes, preserves every matching outer and does not hide 
   assert.equal(r.status,1); const report=JSON.parse(r.stdout);
   assert.equal(report.summary.functions_found,14);assert.equal(report.summary.functions_presented,12);
   assert.ok(report.functions.every(f=>f.name==='process'));
-  assert.deepEqual(report.functions.map(f=>Number(f.location.split(':').at(-2))),Array.from({length:12},(_,i)=>i+1));
+  assert.deepEqual(report.functions.map(f=>Number(f.location.split(':').at(-3))),Array.from({length:12},(_,i)=>i+1));
   assert.equal('analyzed_files' in report,false);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
@@ -102,7 +102,7 @@ test('filter selects name prefixes and presents only their files in JSON and Mar
   const json=run(dir,...args,'--format','json'); assert.equal(json.status,0);
   const report=JSON.parse(json.stdout);
   assert.deepEqual(report.functions.map(f=>f.name),['process','processExtra','save']);
-  assert.deepEqual([...new Set(report.functions.map(f=>f.location.split(':')[0]))],['a.js','b.js']);
+  assert.deepEqual([...new Set(report.functions.map(f=>f.location.split(':').slice(0,-3).join(':')))],['a.js','b.js']);
   assert.deepEqual(report.summary,{files:3,functions_found:5,functions_presented:3,function_discovery_complete:true,has_errors:false});
   for(const mode of [['--format','markdown'],['--explain']]) {
    const md=run(dir,...args,...mode); assert.equal(md.status,0);
@@ -117,15 +117,12 @@ test('empty input and malformed arguments use expected exit codes',()=>{
  const empty=run(os.tmpdir());assert.equal(empty.status,0);assert.deepEqual(JSON.parse(empty.stdout).summary,{files:0,functions_found:0,functions_presented:0,function_discovery_complete:true,has_errors:false});
  assert.equal(run(os.tmpdir(),'--path').status,1);assert.equal(run(os.tmpdir(),'--format','xml').status,1);
 });
-test('missing literal file does not prevent remaining analysis',async()=>{
+test('missing literal file aborts publication alongside valid files',async()=>{
  const dir=await mkdtemp(path.join(os.tmpdir(),'metrics-'));
  try {
   await writeFile(path.join(dir,'a.js'),'function a(){}');await writeFile(path.join(dir,'z.rs'),'fn z(){}');
   const r=run(dir,'--path','a.js','--path','missing.rs','--path','z.rs');
-  assert.equal(r.status,1);const report=JSON.parse(r.stdout);
-  assert.deepEqual(report.summary,{files:3,functions_found:2,functions_presented:2,function_discovery_complete:false,has_errors:true});
-  assert.deepEqual(report.functions.map(f=>f.name),['a','z']);
-  assert.equal('analyzed_files' in report,false);
+  assert.equal(r.status,1); assert.equal(r.stdout,''); assert.match(r.stderr,/missing\.rs/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('UC-14 public CLI compares equivalent Rust and JS with manual expectations',async()=>{
@@ -159,7 +156,7 @@ test('UC-09/16 JSON and Markdown present the same selected names and totals',asy
   assert.deepEqual(report.functions.map(f=>f.name),['process','save']);
   assert.match(md.stdout,/functions found: 3; functions presented: 2/);
   assert.match(md.stdout,/\| Name\s+\| Location\s+\|\s+Cognitive \|\s+Cyclomatic \|\s+Statements \|/);
-  assert.match(md.stdout,/\| process\s+\| a\.js:1:1\s+\|\s+0 \|\s+1 \|\s+1 \|/);
+  assert.match(md.stdout,/\| process\s+\| a\.js:1:1:27\s+\|\s+0 \|\s+1 \|\s+1 \|/);
   assert.match(md.stdout,/\| save\s+\| a\.js:[^|]+\|\s+0 \|\s+1 \|\s+0 \|/);
   assert.doesNotMatch(md.stdout,/Analyzed files:/);
   const none=run(dir,'--path','a.js','--filter','null');assert.equal(JSON.parse(none.stdout).summary.functions_presented,0);

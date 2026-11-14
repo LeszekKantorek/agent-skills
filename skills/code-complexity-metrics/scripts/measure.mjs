@@ -1,4 +1,5 @@
-import { readFile, open, stat, realpath } from 'node:fs/promises';
+import { readFile, open, stat, lstat, realpath, readlink, rename, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { inputFiles, languageFor } from './input-files.mjs';
 import { parse } from './parser.mjs';
@@ -42,37 +43,73 @@ async function prospectivePath(file) {
   }
 }
 
-async function writeSafely(target, files, content) {
-  if (target === '') throw Error('Output path is empty');
+async function resolveDestination(target) {
+  // Keep '..' intact until the filesystem has followed preceding symlinks.
+  const drive = process.platform === 'win32' && /^[a-z]:/i.test(target) && !path.isAbsolute(target) ? target.slice(0, 2) : '';
+  let current = path.isAbsolute(target) ? target
+    : `${drive ? path.resolve(drive) : process.cwd()}${path.sep}${target.slice(drive.length)}`;
+  for (let depth = 0; depth < 40; depth++) {
+    // A trailing separator requires a directory, which cannot be a report file.
+    if ((process.platform === 'win32' ? /[\\/]$/ : /\/$/).test(current)) throw Error('Output is not a regular file');
+    let info;
+    try { info = await lstat(current); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const parent = await realpath(path.dirname(current));
+    if (!info || !info.isSymbolicLink()) return path.join(parent, path.basename(current));
+    const link = await readlink(current);
+    current = path.isAbsolute(link) ? link : `${parent}${path.sep}${link}`;
+  }
+  throw Error('Too many output symbolic links');
+}
+
+async function destinationIdentity(target, files) {
   const destinationPath = await prospectivePath(target);
+  let destination;
+  try { destination = await stat(target, { bigint: true }); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (destination && !destination.isFile()) throw Error('Output is not a regular file');
   for (const file of files) {
     if (normalized(file) === normalized(target) || await prospectivePath(file) === destinationPath) {
       throw Error('Output aliases an input file');
     }
-  }
-  // The opened object is also compared by identity before any truncation.
-  let handle;
-  try { handle = await open(target, 'r+'); }
-  catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    handle = await open(target, 'wx+');
-  }
-  try {
-    const destination = await handle.stat({ bigint: true });
-    if (!destination.isFile()) throw Error('Output is not a regular file');
-    for (const file of files) {
-      let source;
-      try { source = await stat(file, { bigint: true }); }
-      catch (error) {
-        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') continue;
-        throw Error(`Cannot establish input identity: ${error.message}`);
-      }
+    let source;
+    try { source = await stat(file, { bigint: true }); }
+    catch (error) {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') continue;
+      throw Error(`Cannot establish input identity: ${error.message}`);
+    }
+    if (destination) {
       if (source.ino === 0n || destination.ino === 0n) throw Error('Cannot establish file identity');
       if (source.dev === destination.dev && source.ino === destination.ino) throw Error('Output aliases an input file');
     }
-    await handle.truncate(0);
+  }
+  return destination;
+}
+
+async function writeSafely(target, files, content) {
+  if (target === '') throw Error('Output path is empty');
+  const destination = await resolveDestination(target);
+  const initial = await destinationIdentity(destination, files);
+  const temporary = path.join(path.dirname(destination), `.ccm-${randomUUID()}.tmp`);
+  let handle, ownsTemporary = false;
+  try {
+    handle = await open(temporary, 'wx');
+    ownsTemporary = true;
+    if (initial) await handle.chmod(Number(initial.mode & 0o777n));
     await handle.writeFile(content);
-  } finally { await handle.close(); }
+    await handle.close();
+    handle = undefined;
+    if (await resolveDestination(target) !== destination) throw Error('Output changed during publication');
+    const current = await destinationIdentity(destination, files);
+    if (Boolean(initial) !== Boolean(current) || initial && (initial.dev !== current.dev || initial.ino !== current.ino)) {
+      throw Error('Output changed during publication');
+    }
+    await rename(temporary, destination);
+    ownsTemporary = false;
+  } finally {
+    try { if (handle) await handle.close(); }
+    finally { if (ownsTemporary) await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; }); }
+  }
 }
 
 async function main() {
@@ -84,7 +121,13 @@ async function main() {
     const fileId = path.resolve(file);
     const language = languageFor(file);
     if (!language) {
-      results.push({ fileId, source: null, analysis: null, diagnostics: [diagnostic('UNSUPPORTED_LANGUAGE', 'unsupported', 'Unsupported language', fileId)] });
+      try {
+        const info = await stat(file);
+        if (!info.isFile()) throw Error('Input is not a regular file');
+        results.push({ fileId, source: null, analysis: null, diagnostics: [diagnostic('UNSUPPORTED_LANGUAGE', 'unsupported', 'Unsupported language', fileId)] });
+      } catch (error) {
+        results.push({ fileId, source: null, analysis: null, diagnostics: [diagnostic('READ_ERROR', 'input', error.message, fileId)] });
+      }
       continue;
     }
     let source, parsed;
@@ -101,6 +144,11 @@ async function main() {
   const globals = inputErrors.map(error => diagnostic('INPUT_GLOB_ERROR', 'input', `${error.file}: ${error.message}`));
   const aggregateResult = aggregate(results, globals);
   const { report, selected } = makeReport(aggregateResult, options.filter);
+  if (report.summary.has_errors && options.output !== undefined) {
+    if (report.diagnostics.length) process.stderr.write(diagnosticText(report) + '\n');
+    process.exitCode = 1;
+    return;
+  }
   const output = options.explain || options.format === 'markdown' ? markdown(report, selected, aggregateResult, options.explain)
     : options.format === 'csv' ? csv(report) : JSON.stringify(report, null, 2) + '\n';
   if (options.format === 'csv' && !options.explain && report.diagnostics.length) process.stderr.write(diagnosticText(report) + '\n');
