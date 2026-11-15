@@ -22,61 +22,95 @@ function pattern(language, content, start, copy) {
   } finally { tree?.delete(); parser.delete(); }
 }
 
+function readExpression(language, source, start, end, copy = (_node, field) => field) {
+  const result = parseMacroArguments(language, source.slice(start, end), start, copy, {single: true});
+  return result && result.filter(x => (typeof x === 'string' ? x : x?.field) === 'argument').length === 1 ? result : null;
+}
+
+function isBlockExpression(language, source, start, end) {
+  const result = parseMacroArguments(language, source.slice(start, end), start,
+    (node, field) => field === 'argument' ? node.type : null, {single: true});
+  return result?.filter(Boolean).length === 1 && result.includes('block');
+}
+
+function findBinding(tokens, first, read) {
+  for (let j = first + 1; j < tokens.length; j++) {
+    if (tokens[j].type === '=>') return -1;
+    if (tokens[j].type === '=' && read.pattern(read.start(first), read.end(j - 1), () => true)) return j;
+  }
+  return -1;
+}
+
+function findInputArrow(tokens, binding, read) {
+  for (let j = binding + 2; j < tokens.length; j++) {
+    if (tokens[j].type === '=>' && read.expression(read.start(binding + 1), read.end(j - 1))) return j;
+  }
+  return -1;
+}
+
+function findBodyBoundary(tokens, first, read) {
+  for (let j = first + 1; j <= tokens.length; j++) {
+    const comma = j < tokens.length && tokens[j].type === ',';
+    const candidate = tokens[j - 1];
+    const block = candidate.type === 'token_tree' && candidate.firstChild?.type === '{' &&
+      read.isBlock(read.start(first), read.end(j - 1));
+    if (j !== tokens.length && !comma && !block) continue;
+    const next = comma ? j + 1 : j;
+    if (next < tokens.length && findBinding(tokens, next, read) < 0) continue;
+    if (candidate.type === ',' || !read.expression(read.start(first), read.end(j - 1))) continue;
+    return {last: j - 1, next};
+  }
+  return null;
+}
+
+function planArms(tokens, read) {
+  const plans = [];
+  let first = 0;
+  while (first < tokens.length) {
+    const binding = findBinding(tokens, first, read);
+    if (binding < 0) return null;
+    const arrow = findInputArrow(tokens, binding, read);
+    if (arrow < 0 || arrow + 1 >= tokens.length) return null;
+    const body = findBodyBoundary(tokens, arrow + 1, read);
+    if (!body || (body.next < tokens.length && tokens[body.next].type === ',')) return null;
+    plans.push({
+      pattern: [read.start(first), read.end(binding - 1)],
+      input: [read.start(binding + 1), read.end(arrow - 1)],
+      body: [read.start(arrow + 1), read.end(body.last)],
+    });
+    first = body.next;
+  }
+  return plans;
+}
+
+function appendExpression(out, children, role) {
+  for (const child of children) {
+    if (child.field === 'argument') child.field = role;
+    out.push(child);
+  }
+}
+
+function copyArms(plans, read, copy) {
+  const out = [];
+  for (const {pattern, input, body} of plans) {
+    out.push(read.pattern(...pattern, copy));
+    appendExpression(out, read.expression(...input, copy), 'input');
+    appendExpression(out, read.expression(...body, copy), 'body');
+  }
+  return out;
+}
+
 export function parseMacroArms(language, tokenTree, source, offset, copy) {
   const tokens = tokenTree.children.slice(1, -1).filter(n => !n.type.endsWith('_comment'));
   if (!tokens.length) return null;
-  const start = i => tokens[i].startIndex + offset, end = i => tokens[i].endIndex + offset;
-  const expr = (a, b, cb = (_n, field) => field) => {
-    const result = parseMacroArguments(language, source.slice(a, b), a, cb, {single:true});
-    return result && result.filter(x => (typeof x === 'string' ? x : x?.field) === 'argument').length === 1 ? result : null;
+  const read = {
+    start: i => tokens[i].startIndex + offset,
+    end: i => tokens[i].endIndex + offset,
+    pattern: (start, end, callback) => pattern(language, source.slice(start, end), start, callback),
+    expression: (start, end, callback) => readExpression(language, source, start, end, callback),
+    isBlock: (start, end) => isBlockExpression(language, source, start, end),
   };
-  const blockExpr = (a, b) => {
-    const result = parseMacroArguments(language, source.slice(a, b), a,
-      (node, field) => field === 'argument' ? node.type : null, {single:true});
-    return result?.filter(Boolean).length === 1 && result.includes('block');
-  };
-  const beginsArm = pos => {
-    for (let j = pos + 1; j < tokens.length; j++) {
-      if (tokens[j].type === '=>') return -1;
-      if (tokens[j].type === '=' && pattern(language, source.slice(start(pos), end(j-1)), start(pos), () => true)) return j;
-    }
-    return -1;
-  };
-  const plans = []; let i = 0;
-  while (i < tokens.length) {
-    let binding = -1, arrow = -1;
-    for (let j = i + 1; j < tokens.length; j++) {
-      if (tokens[j].type === '=>') break;
-      if (tokens[j].type === '=' && pattern(language, source.slice(start(i), end(j-1)), start(i), () => true)) { binding = j; break; }
-    }
-    if (binding < 0) return null;
-    for (let j = binding + 2; j < tokens.length; j++) {
-      if (tokens[j].type === '=>' && expr(start(binding+1), end(j-1))) { arrow = j; break; }
-    }
-    if (arrow < 0 || arrow + 1 >= tokens.length) return null;
-    const first = arrow + 1; let last = -1, next = -1;
-    for (let j = first + 1; j <= tokens.length; j++) {
-      const comma = j < tokens.length && tokens[j].type === ',';
-      const candidate = tokens[j-1];
-      const block = candidate.type === 'token_tree' && candidate.firstChild?.type === '{' && blockExpr(start(first), end(j-1));
-      if (j !== tokens.length && !comma && !block) continue;
-      const candidateNext = comma ? j + 1 : j;
-      const nextBinding = candidateNext < tokens.length ? beginsArm(candidateNext) : -1;
-      if (candidateNext < tokens.length && nextBinding < 0) continue;
-      if (tokens[j-1].type === ',' || !expr(start(first), end(j-1))) continue;
-      last = j - 1; next = comma ? j + 1 : j; break;
-    }
-    if (last < 0 || (next < tokens.length && tokens[next].type === ',')) return null;
-    plans.push({pa:start(i), pb:end(binding-1), ia:start(binding+1), ib:end(arrow-1), ba:start(first), bb:end(last)});
-    i = next;
-  }
-  const out = [];
-  for (const p of plans) {
-    out.push(pattern(language, source.slice(p.pa,p.pb), p.pa, copy));
-    for (const [a,b,role] of [[p.ia,p.ib,'input'], [p.ba,p.bb,'body']]) {
-      const children = expr(a,b,copy);
-      for (const child of children) { if (child.field === 'argument') child.field = role; out.push(child); }
-    }
-  }
-  return out;
+  const plans = planArms(tokens, read);
+  if (!plans) return null;
+  return copyArms(plans, read, copy);
 }
