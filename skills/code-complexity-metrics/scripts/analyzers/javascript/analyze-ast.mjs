@@ -29,6 +29,10 @@ const supported = new Set([
 ]);
 const functions = new Set(['function_expression','function_declaration','generator_function','generator_function_declaration','arrow_function','method_definition']);
 const metrics = ['cognitive', 'cyclomatic', 'statements'];
+const annotationSensitiveTypes = new Set([
+  'string', 'template_string', 'regex', 'comment', 'html_comment',
+  'jsx_text', 'jsx_element', 'jsx_self_closing_element',
+]);
 
 export function prepare(parsedTree, source, fileId) {
   if (!parsedTree?.rootNode) throw new TypeError('Expected a parsed JavaScript tree');
@@ -46,7 +50,8 @@ function sourceLocations(source) {
   const starts = [0], ends = [];
   for (let i = 0; i < source.length; i++) {
     const ch = source[i];
-    if (ch === '\r' || ch === '\n' || ch === '\u2028' || ch === '\u2029') {
+    const isLineTerminator = ch === '\r' || ch === '\n' || ch === '\u2028' || ch === '\u2029';
+    if (isLineTerminator) {
       ends.push(i);
       if (ch === '\r' && source[i + 1] === '\n') i++;
       starts.push(i + 1);
@@ -67,14 +72,20 @@ function copySyntax(root, range) {
   function copy(n, field = null, parent = null) {
     const loc = range(n.startIndex, n.endIndex);
     const node = createAnalyzeNode({type:n.type, field, isNamed:n.isNamed, ...loc});
-    if (n.type === 'comment' || n.type === 'html_comment') comments.push(loc);
-    if (['string','template_string','regex','comment','html_comment','jsx_text','jsx_element','jsx_self_closing_element'].includes(n.type)) unsafe.push(loc);
-    if (n.type === 'ERROR' || n.isMissing) {
+    const isCommentNode = n.type === 'comment' || n.type === 'html_comment';
+    if (isCommentNode) comments.push(loc);
+    const protectFromAnnotation = annotationSensitiveTypes.has(n.type);
+    if (protectFromAnnotation) unsafe.push(loc);
+    const isParseError = n.type === 'ERROR' || n.isMissing;
+    if (isParseError) {
       // A delimiter can alter the recovered nesting despite a later semicolon.
       // Only leaf tokens incapable of opening or closing a structural boundary
       // are evidence that this error remained inside the declaration.
-      const local = n.type === 'ERROR' && parent?.type === 'variable_declarator' && n.childCount > 0 && n.children.every(c => !c.isNamed && c.childCount === 0 && !c.isMissing && !/[()[\]{}]/u.test(c.type)) && parent.parent?.children.some(c => c.type === ';' && !c.isMissing);
-      issues.push({node, category:'parse', code:'javascript-parse-error', message:'JavaScript syntax could not be parsed completely.', local});
+      const isLocalDeclarationError = n.type === 'ERROR' && parent?.type === 'variable_declarator' &&
+        n.childCount > 0 &&
+        n.children.every(c => !c.isNamed && c.childCount === 0 && !c.isMissing && !/[()[\]{}]/u.test(c.type)) &&
+        parent.parent?.children.some(c => c.type === ';' && !c.isMissing);
+      issues.push({node, category:'parse', code:'javascript-parse-error', message:'JavaScript syntax could not be parsed completely.', local:isLocalDeclarationError});
     }
     else if (n.isNamed && !supported.has(n.type)) {
       issues.push({node, category:'unsupported', code:'javascript-unsupported-syntax', message:`JavaScript syntax ${n.type} is not classified by the scoring profile.`, complete:!n.hasError});
@@ -91,12 +102,16 @@ function findOuters(tree, source, fileId) {
   const text = node => source.slice(node.startIndex, node.endIndex);
   function assign(node, owner = null, parent = null) {
     const enclosing = owner;
-    if (functions.has(node.type) && owner === null) {
+    const isOuterFunction = functions.has(node.type) && owner === null;
+    if (isOuterFunction) {
       owner = outerId(fileId, records.length);
       const explicit = node.children.find(c => c.field === 'name');
       let binding = null;
-      if (node.field === 'value' && parent?.type === 'variable_declarator') {
-        binding = parent.children.find(c => c.field === 'name' && c.type === 'identifier');
+      const isVariableInitializer = node.field === 'value' && parent?.type === 'variable_declarator';
+      if (isVariableInitializer) {
+        const isVariableNameNode = child =>
+          child.field === 'name' && child.type === 'identifier';
+        binding = parent.children.find(isVariableNameNode);
       } else if (node.field === 'value' && parent?.type === 'field_definition') {
         binding = parent.children.find(c => c.field === 'property' && ['property_identifier','private_property_identifier'].includes(c.type));
       }
@@ -107,7 +122,9 @@ function findOuters(tree, source, fileId) {
     for (const child of node.children) {
       // Computed names execute in the definition's surrounding context. This
       // also applies to functions appearing within the name itself.
-      const childOwner = node.type === 'method_definition' && ((child.field === 'name' && child.type === 'computed_property_name') || child.field === 'decorator') ? enclosing : owner;
+      const usesEnclosingOwner = node.type === 'method_definition' &&
+        ((child.field === 'name' && child.type === 'computed_property_name') || child.field === 'decorator');
+      const childOwner = usesEnclosingOwner ? enclosing : owner;
       assign(child, childOwner, node);
     }
   }

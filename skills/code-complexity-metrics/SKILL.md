@@ -68,6 +68,7 @@ Notes:
 
 * See the [Rust statement scorer case study](references/rust-statement-scorer-refactoring.md) for an example of choosing which metric to optimize.
 * See the [Rust AST preparation case study](references/rust-ast-preparation-refactoring.md) for an example of splitting work into stages to improve readability.
+* See the [named AST conditions case study](references/named-ast-conditions.md) for examples of naming conditions and `find()` predicates.
 * Use the report to identify functions that need closer review and to track complexity changes between revisions.
 * The measurements describe syntax. They do not establish correctness, architectural quality, or runtime performance.
 

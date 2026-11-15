@@ -8,6 +8,10 @@ import {parseMacroTypes} from './macro-types.mjs';
 import {parseMacroDeclarations} from './macro-declarations.mjs';
 import {docAttributeProbe, collectExpressionDocs} from './macro-docs.mjs';
 
+const annotationSensitiveTypes = new Set([
+  'string_literal', 'raw_string_literal', 'char_literal', 'block_comment',
+]);
+
 export function prepare(parsedTree, source, fileId) {
   if (!parsedTree?.rootNode) throw new TypeError('Expected a parsed Rust tree');
   const root = parsedTree.rootNode;
@@ -37,8 +41,10 @@ function copySyntax(root, language, source, range) {
   const comments = [], unsafe = [], issues = [];
   function lexical(node, offset = 0) {
     const start = node.startIndex + offset, end = node.endIndex + offset;
-    if (node.type === 'line_comment' || node.type === 'block_comment') comments.push(range(start, end));
-    if (['string_literal', 'raw_string_literal', 'char_literal', 'block_comment'].includes(node.type)) unsafe.push(range(start, end));
+    const isCommentNode = node.type === 'line_comment' || node.type === 'block_comment';
+    if (isCommentNode) comments.push(range(start, end));
+    const protectFromAnnotation = annotationSensitiveTypes.has(node.type);
+    if (protectFromAnnotation) unsafe.push(range(start, end));
     for (const child of node.children) lexical(child, offset);
   }
 
@@ -46,10 +52,15 @@ function copySyntax(root, language, source, range) {
     const start = node.startIndex + offset, end = node.endIndex + offset;
     const out = createAnalyzeNode({type: node.type, field, isNamed: node.isNamed, ...range(start, end)});
     const isDefinition = excluded || node.type === 'macro_definition';
-    if ((!excluded || definitionBoundary) && (node.type === 'ERROR' || node.isMissing)) issues.push({node: out, code: 'rust-parse-error', category: 'parse', message: 'Rust syntax could not be parsed completely.', boundaryRisk: boundaryRisk(node, parentNode)});
+    const shouldReportParseError = (!excluded || definitionBoundary) && (node.type === 'ERROR' || node.isMissing);
+    if (shouldReportParseError) {
+      issues.push({node: out, code: 'rust-parse-error', category: 'parse',
+        message: 'Rust syntax could not be parsed completely.', boundaryRisk: boundaryRisk(node, parentNode)});
+    }
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
-      if (!isDefinition && node.type === 'macro_invocation' && child.type === 'token_tree') {
+      const shouldExpandMacroArguments = !isDefinition && node.type === 'macro_invocation' && child.type === 'token_tree';
+      if (shouldExpandMacroArguments) {
         out.children.push(...expandTokenTree(child, node, parentNode, offset, out));
         continue;
       }
@@ -68,7 +79,8 @@ function copySyntax(root, language, source, range) {
   function expandTokenTree(token, invocation, parent, offset, out) {
     const open = token.firstChild, close = token.lastChild;
     const closed = validDelimiters(token, open, close);
-    if (token.hasError || !closed) {
+    const isMalformedTokenTree = token.hasError || !closed;
+    if (isMalformedTokenTree) {
       issues.push({node: out, code: 'rust-parse-error', category: 'parse',
         message: 'Macro delimiters or contents contain a syntax error.',
         boundaryRisk: tokenTreeBoundaryRisk(token, invocation, parent, source, offset, open, close, closed)});
@@ -97,14 +109,17 @@ const anonymousLeaf = node => !node.isNamed && node.childCount === 0 && !node.is
 // tree and errors inside an omitted token tree. Only explicit structural
 // boundaries can establish that recovery stayed local.
 function boundaryRisk(node, parent, localMissingClose = false, closedTokenTree = false) {
-  if (localMissingClose && node.isMissing) return false;
+  const isLocalMissingDelimiter = localMissingClose && node.isMissing;
+  if (isLocalMissingDelimiter) return false;
   if (node.type !== 'ERROR') return true;
-  if (closedTokenTree && node.childCount > 0 &&
-      node.children.every(child => child.type !== '}' && anonymousLeaf(child))) return false;
+  const isLocalTokenTreeError = closedTokenTree && node.childCount > 0 &&
+    node.children.every(child => child.type !== '}' && anonymousLeaf(child));
+  if (isLocalTokenTreeError) return false;
   const close = parent?.lastChild;
-  return !(parent?.type.endsWith('_declaration') && close?.type === ';' && !close.isMissing &&
+  const isLocalDeclarationError = parent?.type.endsWith('_declaration') && close?.type === ';' && !close.isMissing &&
     node.startIndex > parent.startIndex && node.endIndex <= close.startIndex &&
-    node.children.every(anonymousLeaf));
+    node.children.every(anonymousLeaf);
+  return !isLocalDeclarationError;
 }
 
 function collectParseErrors(node, parent, errors) {
@@ -151,7 +166,8 @@ function selectProfile(language, token, source, offset) {
       collectExpressionDocs(node, shift, expressionDocs, macroBoundaries);
       return probeNode(node, field);
     };
-    if (profile(language, token, source, offset, collect, probeNode) !== null) {
+    const profileMatches = profile(language, token, source, offset, collect, probeNode) !== null;
+    if (profileMatches) {
       return {profile, expressionDocs, macroBoundaries};
     }
   }
@@ -172,8 +188,9 @@ function recoverMacro(language, token, source, offset, copy, make) {
 function functionName(node, parent, source) {
   const name = node.children.find(child => child.field === 'name');
   if (name) return source.slice(name.startIndex, name.endIndex);
-  if (node.type !== 'closure_expression' || node.field !== 'value' ||
-      !['let_declaration', 'const_item', 'static_item'].includes(parent?.type)) return null;
+  const canUseBindingName = node.type === 'closure_expression' && node.field === 'value' &&
+    ['let_declaration', 'const_item', 'static_item'].includes(parent?.type);
+  if (!canUseBindingName) return null;
   const binding = parent.children.find(child =>
     child.type === 'identifier' && (child.field === 'pattern' || child.field === 'name'));
   return binding ? source.slice(binding.startIndex, binding.endIndex) : null;
@@ -183,7 +200,9 @@ function findOuters(tree, source, fileId) {
   const functions = [], ownerByNode = new Map();
   function assign(node, owner = null, excluded = false, parent = null) {
     const definition = excluded || node.type === 'macro_definition';
-    if (!definition && owner === null && (node.type === 'function_item' || node.type === 'closure_expression')) {
+    const isOuterFunction = !definition && owner === null &&
+      (node.type === 'function_item' || node.type === 'closure_expression');
+    if (isOuterFunction) {
       owner = outerId(fileId, functions.length);
       functions.push({id: owner, name: functionName(node, parent, source), root: node});
     }
