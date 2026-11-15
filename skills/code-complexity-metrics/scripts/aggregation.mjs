@@ -70,38 +70,99 @@ function canonical(value) {
 }
 function diagnosticKey(d) { return canonical({...d, affectedMetrics: [...d.affectedMetrics].sort()}); }
 function collect(analysis, fileId, source) {
-  if (!analysis || !Array.isArray(analysis.functions) || !(analysis.ownerByNode instanceof Map) || !Array.isArray(analysis.diagnostics)) throw Error('Invalid analysis contract');
-  const starts=presentationStarts(analysis.presentation,source);
+  const invalidAnalysis = !analysis || !Array.isArray(analysis.functions)
+    || !(analysis.ownerByNode instanceof Map) || !Array.isArray(analysis.diagnostics);
+  if (invalidAnalysis) throw Error('Invalid analysis contract');
+
+  const starts = presentationStarts(analysis.presentation, source);
   if (!starts) throw Error('Invalid presentation');
+
+  const records = createFunctionRecords(analysis.functions, fileId);
+  const tree = analysis.tree;
+  const rows = analysis.presentation.lineAnnotations.length;
+  const ownerByNode = analysis.ownerByNode;
+  const seen = collectTreeScores(tree, ownerByNode, records, source.length, starts);
+  validateFunctionRoots(ownerByNode, seen, records);
+
+  if (!analysis.diagnostics.every(d => validDiagnostic(d, fileId, source, rows, records, starts))) {
+    throw Error('Invalid analysis diagnostic');
+  }
+  return [...records.values()].map(({root, ...record}) => ({
+    ...record, rootRange: range(root), metrics: {...record.knownScore},
+  }));
+}
+
+function createFunctionRecords(functions, fileId) {
   const records = new Map();
-  for (const f of analysis.functions) {
-    let identity; try { identity=JSON.parse(f.id); } catch { throw Error('Invalid function ID'); }
-    if (!Array.isArray(identity) || identity.length!==2 || identity[0]!==fileId || !Number.isSafeInteger(identity[1]) || identity[1]<0 || JSON.stringify(identity)!==f.id || records.has(f.id) || !(typeof f.name==='string' || f.name===null) || !f.root) throw Error('Invalid or duplicate function');
-    records.set(f.id, {id:f.id,name:f.name,root:f.root,knownScore:zero(),byRow:new Map()});
-  }
-  const seen=new Set(), stack=[analysis.tree], rows=analysis.presentation.lineAnnotations.length;
-  while (stack.length) {
-    const n=stack.pop();
-    if (!n || typeof n!=='object' || seen.has(n)) throw Error('Tree contains a cycle, shared node or invalid node');
-    seen.add(n);
-    if (typeof n.type!=='string' || !(n.field===null || typeof n.field==='string') || typeof n.isNamed!=='boolean') throw Error('Invalid node shape');
-    if (['subtreeScore','analyzed','ownScore','sourceRange'].some(key=>Object.hasOwn(n,key))) throw Error('Invalid node shape');
-    if (!analysis.ownerByNode.has(n)) throw Error('Missing owner entry');
-    const owner=analysis.ownerByNode.get(n);
-    if (owner!==null && (typeof owner!=='string' || !records.has(owner))) throw Error('Unknown owner');
-    if (!Array.isArray(n.children) || !n.score || !KEYS.every(k=>Number.isSafeInteger(n.score[k]) && n.score[k]>=0) || !exactRange(n,source.length,starts)) throw Error('Invalid node score, children or range');
-    if (owner!==null && KEYS.some(k=>n.score[k]!==0)) {
-      const record=records.get(owner), row=n.startPosition.row+1;
-      add(record.knownScore,n.score);
-      if (!record.byRow.has(row)) record.byRow.set(row,zero());
-      add(record.byRow.get(row),n.score);
+  for (const f of functions) {
+    let identity;
+    try {
+      identity = JSON.parse(f.id);
+    } catch {
+      throw Error('Invalid function ID');
     }
-    for (let i=n.children.length-1;i>=0;i--) stack.push(n.children[i]);
+    const invalidOrDuplicate = !Array.isArray(identity) || identity.length !== 2
+      || identity[0] !== fileId || !Number.isSafeInteger(identity[1]) || identity[1] < 0
+      || JSON.stringify(identity) !== f.id || records.has(f.id)
+      || !(typeof f.name === 'string' || f.name === null) || !f.root;
+    if (invalidOrDuplicate) throw Error('Invalid or duplicate function');
+
+    records.set(f.id, {id: f.id, name: f.name, root: f.root, knownScore: zero(), byRow: new Map()});
   }
-  if (analysis.ownerByNode.size!==seen.size) throw Error('Owner map contains nodes outside the tree');
-  for (const r of records.values()) if (!seen.has(r.root) || analysis.ownerByNode.get(r.root)!==r.id) throw Error('Function root is missing or has wrong owner');
-  if (!analysis.diagnostics.every(d=>validDiagnostic(d,fileId,source,rows,records,starts))) throw Error('Invalid analysis diagnostic');
-  return [...records.values()].map(({root,...r})=>({...r,rootRange:range(root),metrics:{...r.knownScore}}));
+  return records;
+}
+
+function collectTreeScores(tree, ownerByNode, records, sourceLength, starts) {
+  const seen = new Set();
+  const stack = [tree];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node || typeof node !== 'object' || seen.has(node)) {
+      throw Error('Tree contains a cycle, shared node or invalid node');
+    }
+    seen.add(node);
+
+    const owner = validateScoredNode(node, ownerByNode, records, sourceLength, starts);
+    if (owner !== null && KEYS.some(key => node.score[key] !== 0)) {
+      addNodeScore(records.get(owner), node);
+    }
+    for (let i = node.children.length - 1; i >= 0; i--) stack.push(node.children[i]);
+  }
+  return seen;
+}
+
+function validateScoredNode(node, ownerByNode, records, sourceLength, starts) {
+  const invalidShape = typeof node.type !== 'string'
+    || !(node.field === null || typeof node.field === 'string')
+    || typeof node.isNamed !== 'boolean'
+    || ['subtreeScore', 'analyzed', 'ownScore', 'sourceRange'].some(key => Object.hasOwn(node, key));
+  if (invalidShape) throw Error('Invalid node shape');
+
+  if (!ownerByNode.has(node)) throw Error('Missing owner entry');
+  const owner = ownerByNode.get(node);
+  if (owner !== null && (typeof owner !== 'string' || !records.has(owner))) throw Error('Unknown owner');
+
+  const invalidData = !Array.isArray(node.children) || !node.score
+    || !KEYS.every(key => Number.isSafeInteger(node.score[key]) && node.score[key] >= 0)
+    || !exactRange(node, sourceLength, starts);
+  if (invalidData) throw Error('Invalid node score, children or range');
+  return owner;
+}
+
+function addNodeScore(record, node) {
+  const row = node.startPosition.row + 1;
+  add(record.knownScore, node.score);
+  if (!record.byRow.has(row)) record.byRow.set(row, zero());
+  add(record.byRow.get(row), node.score);
+}
+
+function validateFunctionRoots(ownerByNode, seen, records) {
+  if (ownerByNode.size !== seen.size) throw Error('Owner map contains nodes outside the tree');
+  for (const record of records.values()) {
+    if (!seen.has(record.root) || ownerByNode.get(record.root) !== record.id) {
+      throw Error('Function root is missing or has wrong owner');
+    }
+  }
 }
 
 function physicalRows(r) {
@@ -119,82 +180,129 @@ function compareDiagnostics(a, b) {
   return compareText(a.code, b.code) || compareText(a.message, b.message);
 }
 
-export function aggregate(fileResults, globalDiagnostics=[]) {
-  const result={files:[],functions:[],diagnostics:[],functionDiscoveryComplete:true,hasErrors:false,sources:new Map(),presentation:new Map()};
-  for (const file of fileResults) {
-    let records=[], analyzed=false, error=null;
-    const sourceValid=file.source && file.source.fileId===file.fileId && typeof file.source.source==='string';
-    if (sourceValid) result.sources.set(file.fileId,file.source);
-    const length=sourceValid ? file.source.source.length : null;
-    // File-level diagnostics are independent of Prepared and survive its rejection.
-    const fileDiagnostics=Array.isArray(file.diagnostics) ? file.diagnostics : [];
-    // Diagnostic validity must not depend on presentation, which itself may
-    // be the reason for rejecting Prepared. Use a language-neutral upper bound.
-    const rows=length===null ? 0 : 1 + [...file.source.source.matchAll(/\r\n|[\r\n\u2028\u2029]/g)].length;
-
-    const starts=sourceValid ? presentationStarts(file.analysis?.presentation,file.source.source) : null;
-    const diagnostics=fileDiagnostics.filter(d=>validDiagnostic(d,file.fileId,sourceValid ? file.source.source : null,rows,null,starts));
-    if (diagnostics.length!==fileDiagnostics.length || !Array.isArray(file.diagnostics)) error='Invalid file diagnostic';
-    if (file.analysis) {
-      try {
-        if (!sourceValid || error) throw Error(error || 'Missing or inconsistent source');
-        records=collect(file.analysis,file.fileId,file.source.source);
-        const ids=new Set(records.map(r=>r.id));
-        if (!diagnostics.every(d=>d.owner===null || ids.has(d.owner))) throw Error('Unknown diagnostic owner');
-        analyzed=true;
-        result.presentation.set(file.fileId,file.analysis.presentation);
-      } catch (e) { records=[]; error=e.message; }
-    } else if (!diagnostics.length && !error) error='Missing analysis without diagnostic';
-    // Preserve valid analysis diagnostics even if another part of Prepared is
-    // invalid; never publish malformed entries or partially computed records.
-    const owners=Array.isArray(file.analysis?.functions) ? new Set(file.analysis.functions.map(f=>f?.id)) : null;
-    const analysisDiagnostics=Array.isArray(file.analysis?.diagnostics) ? file.analysis.diagnostics.filter(d=>validDiagnostic(d,file.fileId,sourceValid ? file.source.source : null,rows,owners,starts)) : [];
-    const remaining=diagnostics.map(diagnosticKey);
-    for (const d of analysisDiagnostics) { const key=diagnosticKey(d), i=remaining.indexOf(key); if (i<0) diagnostics.push(d); else remaining.splice(i,1); }
-    if (error) diagnostics.push({code:'INVALID_ANALYSIS_CONTRACT',category:'internal',message:String(error),fileId:file.fileId,range:null,owner:null,affectedMetrics:[],affectsFunctionDiscovery:true});
-    for (const r of records) r.fileId=file.fileId;
-    // Project scores only after analysis, using physical source rows shared by all owners.
-    const masks = new Map();
-    const located = diagnostics.filter(d => d.range).sort((a, b) =>
-      a.range.startIndex - b.range.startIndex || compareDiagnostics(a, b));
-    for (const d of located) {
-      // A half-open end at the beginning of a line excludes that line.
-      const {first, last} = physicalRows(d.range);
-      for (let row = first; row <= last; row++) {
-        if (!masks.has(row)) masks.set(row, []);
-        masks.get(row).push(d);
-      }
-    }
-    for (const record of records) {
-      const {first, last} = physicalRows(record.rootRange);
-      const touched = new Set();
-      record.errorRows = new Map();
-      for (const [row, ds] of masks) {
-        const hasScore = record.byRow.has(row);
-        const overlaps = hasScore || (row >= first && row <= last);
-        if (overlaps) for (const d of ds) touched.add(d);
-        if (overlaps || ds.some(d => d.owner === record.id)) record.errorRows.set(row, ds);
-        if (hasScore) record.byRow.set(row, zero());
-      }
-      const relevant = located.filter(d => d.owner === record.id || touched.has(d));
-      const unlocated = diagnostics.filter(d => !d.range && d.owner === record.id).sort(compareDiagnostics);
-      record.error = relevant[0] ?? unlocated[0] ?? null;
-      record.metrics=zero();
-      for (const score of record.byRow.values()) add(record.metrics,score);
-    }
-    const functionDiscoveryComplete=analyzed && !diagnostics.some(d=>d.affectsFunctionDiscovery);
-    result.files.push({fileId:file.fileId,analyzed,functionDiscoveryComplete}); result.functions.push(...records); result.diagnostics.push(...diagnostics); result.functionDiscoveryComplete &&=functionDiscoveryComplete;
-  }
-  const globals = Array.isArray(globalDiagnostics) ? globalDiagnostics : [null];
-  for (const d of globals) {
-    const valid = d && ['input','internal'].includes(d.category) && d.owner===null && d.range===null &&
-      validDiagnostic(d,null,null,0);
-    const diagnostic = valid ? d : {code:'INVALID_ANALYSIS_CONTRACT',category:'internal',message:'Invalid global diagnostic',fileId:null,range:null,owner:null,affectedMetrics:[],affectsFunctionDiscovery:true};
-    result.diagnostics.push(diagnostic);
-    if (diagnostic.affectsFunctionDiscovery) result.functionDiscoveryComplete=false;
-  }
-  result.hasErrors=result.diagnostics.length>0;
+export function aggregate(fileResults, globalDiagnostics = []) {
+  const result = {
+    files: [], functions: [], diagnostics: [], functionDiscoveryComplete: true,
+    hasErrors: false, sources: new Map(), presentation: new Map(),
+  };
+  for (const file of fileResults) aggregateFile(file, result);
+  appendGlobalDiagnostics(globalDiagnostics, result);
+  result.hasErrors = result.diagnostics.length > 0;
   return result;
 }
 
+function aggregateFile(file, result) {
+  const sourceValid = file.source && file.source.fileId === file.fileId
+    && typeof file.source.source === 'string';
+  if (sourceValid) result.sources.set(file.fileId, file.source);
+  const source = sourceValid ? file.source.source : null;
 
+  // Diagnostics can survive rejected presentation. Use a language-neutral row bound.
+  const fileDiagnostics = Array.isArray(file.diagnostics) ? file.diagnostics : [];
+  const rows = source === null ? 0 : 1 + [...source.matchAll(/\r\n|[\r\n\u2028\u2029]/g)].length;
+  const starts = sourceValid ? presentationStarts(file.analysis?.presentation, source) : null;
+  const diagnostics = fileDiagnostics.filter(d => validDiagnostic(d, file.fileId, source, rows, null, starts));
+  const invalidFileDiagnostic = diagnostics.length !== fileDiagnostics.length || !Array.isArray(file.diagnostics);
+  const fileDiagnosticError = invalidFileDiagnostic ? 'Invalid file diagnostic' : null;
+
+  const {records, analyzed, error} = readAnalysis(file, source, diagnostics, result.presentation, fileDiagnosticError);
+  mergeAnalysisDiagnostics(file, source, rows, starts, diagnostics);
+  if (error) diagnostics.push(invalidContractDiagnostic(file.fileId, String(error)));
+  for (const record of records) record.fileId = file.fileId;
+  const {located, masks} = indexDiagnosticRows(diagnostics);
+  for (const record of records) projectRecord(record, diagnostics, located, masks);
+
+  const functionDiscoveryComplete = analyzed && !diagnostics.some(d => d.affectsFunctionDiscovery);
+  result.files.push({fileId: file.fileId, analyzed, functionDiscoveryComplete});
+  result.functions.push(...records);
+  result.diagnostics.push(...diagnostics);
+  result.functionDiscoveryComplete &&= functionDiscoveryComplete;
+}
+
+function readAnalysis(file, source, diagnostics, presentation, error) {
+  let records = [], analyzed = false;
+  if (file.analysis) {
+    try {
+      if (source === null || error) throw Error(error || 'Missing or inconsistent source');
+      records = collect(file.analysis, file.fileId, source);
+      const ids = new Set(records.map(record => record.id));
+      if (!diagnostics.every(d => d.owner === null || ids.has(d.owner))) throw Error('Unknown diagnostic owner');
+      analyzed = true;
+      presentation.set(file.fileId, file.analysis.presentation);
+    } catch (e) {
+      records = [];
+      error = e.message;
+    }
+  } else if (!diagnostics.length && !error) {
+    error = 'Missing analysis without diagnostic';
+  }
+  return {records, analyzed, error};
+}
+
+function mergeAnalysisDiagnostics(file, source, rows, starts, diagnostics) {
+  // Keep valid entries even if another part of the analysis was rejected.
+  const owners = Array.isArray(file.analysis?.functions)
+    ? new Set(file.analysis.functions.map(f => f?.id))
+    : null;
+  const analysisDiagnostics = Array.isArray(file.analysis?.diagnostics)
+    ? file.analysis.diagnostics.filter(d => validDiagnostic(d, file.fileId, source, rows, owners, starts))
+    : [];
+  const remaining = diagnostics.map(diagnosticKey);
+  for (const diagnostic of analysisDiagnostics) {
+    const matchingFileDiagnostic = remaining.indexOf(diagnosticKey(diagnostic));
+    if (matchingFileDiagnostic < 0) diagnostics.push(diagnostic);
+    else remaining.splice(matchingFileDiagnostic, 1);
+  }
+}
+
+function indexDiagnosticRows(diagnostics) {
+  const masks = new Map();
+  const located = diagnostics.filter(d => d.range).sort((a, b) =>
+    a.range.startIndex - b.range.startIndex || compareDiagnostics(a, b));
+  for (const diagnostic of located) {
+    const {first, last} = physicalRows(diagnostic.range);
+    for (let row = first; row <= last; row++) {
+      if (!masks.has(row)) masks.set(row, []);
+      masks.get(row).push(diagnostic);
+    }
+  }
+  return {located, masks};
+}
+
+function projectRecord(record, diagnostics, located, masks) {
+  const {first, last} = physicalRows(record.rootRange);
+  const touched = new Set();
+  record.errorRows = new Map();
+  for (const [row, rowDiagnostics] of masks) {
+    const hasScore = record.byRow.has(row);
+    const overlaps = hasScore || (row >= first && row <= last);
+    if (overlaps) for (const diagnostic of rowDiagnostics) touched.add(diagnostic);
+    if (overlaps || rowDiagnostics.some(d => d.owner === record.id)) {
+      record.errorRows.set(row, rowDiagnostics);
+    }
+    if (hasScore) record.byRow.set(row, zero());
+  }
+  const relevant = located.filter(d => d.owner === record.id || touched.has(d));
+  const unlocated = diagnostics.filter(d => !d.range && d.owner === record.id).sort(compareDiagnostics);
+  record.error = relevant[0] ?? unlocated[0] ?? null;
+  record.metrics = zero();
+  for (const score of record.byRow.values()) add(record.metrics, score);
+}
+
+function invalidContractDiagnostic(fileId, message) {
+  return {
+    code: 'INVALID_ANALYSIS_CONTRACT', category: 'internal', message, fileId,
+    range: null, owner: null, affectedMetrics: [], affectsFunctionDiscovery: true,
+  };
+}
+
+function appendGlobalDiagnostics(globalDiagnostics, result) {
+  const globals = Array.isArray(globalDiagnostics) ? globalDiagnostics : [null];
+  for (const d of globals) {
+    const valid = d && ['input', 'internal'].includes(d.category) && d.owner === null && d.range === null
+      && validDiagnostic(d, null, null, 0);
+    const diagnostic = valid ? d : invalidContractDiagnostic(null, 'Invalid global diagnostic');
+    result.diagnostics.push(diagnostic);
+    if (diagnostic.affectsFunctionDiscovery) result.functionDiscoveryComplete = false;
+  }
+}
