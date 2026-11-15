@@ -2,12 +2,46 @@ import {createAnalyzeNode, outerId} from '../contracts.mjs';
 
 // These are the visible named node types in the pinned JavaScript grammar which
 // the scoring profile can classify. Wrappers retain all children and fields.
-const supported = new Set(`identifier hash_bang_line html_character_reference string_fragment optional_chain escape_sequence comment regex_pattern regex_flags number private_property_identifier this super true false null undefined html_comment program export_statement namespace_export export_clause export_specifier import import_statement import_clause namespace_import named_imports import_specifier import_attribute expression_statement variable_declaration lexical_declaration using_declaration variable_declarator statement_block else_clause if_statement switch_statement for_statement for_in_statement while_statement do_statement try_statement break_statement continue_statement return_statement throw_statement empty_statement labeled_statement switch_body switch_case switch_default catch_clause finally_clause parenthesized_expression object object_pattern assignment_pattern object_assignment_pattern array array_pattern string class class_declaration class_heritage function_expression function_declaration generator_function generator_function_declaration arrow_function call_expression new_expression await_expression yield_expression with_statement debugger_statement member_expression subscript_expression assignment_expression augmented_assignment_expression spread_element ternary_expression binary_expression unary_expression update_expression sequence_expression template_string template_substitution regex meta_property arguments class_body field_definition formal_parameters class_static_block rest_pattern method_definition pair pair_pattern computed_property_name property_identifier shorthand_property_identifier shorthand_property_identifier_pattern statement_identifier`.split(' '));
+const supported = new Set([
+  'identifier', 'hash_bang_line', 'html_character_reference', 'string_fragment', 'optional_chain',
+  'escape_sequence', 'comment', 'regex_pattern', 'regex_flags', 'number',
+  'private_property_identifier', 'this', 'super', 'true', 'false', 'null', 'undefined',
+  'html_comment', 'program', 'export_statement', 'namespace_export', 'export_clause',
+  'export_specifier', 'import', 'import_statement', 'import_clause', 'namespace_import',
+  'named_imports', 'import_specifier', 'import_attribute', 'expression_statement',
+  'variable_declaration', 'lexical_declaration', 'using_declaration', 'variable_declarator',
+  'statement_block', 'else_clause', 'if_statement', 'switch_statement', 'for_statement',
+  'for_in_statement', 'while_statement', 'do_statement', 'try_statement', 'break_statement',
+  'continue_statement', 'return_statement', 'throw_statement', 'empty_statement',
+  'labeled_statement', 'switch_body', 'switch_case', 'switch_default', 'catch_clause',
+  'finally_clause', 'parenthesized_expression', 'object', 'object_pattern', 'assignment_pattern',
+  'object_assignment_pattern', 'array', 'array_pattern', 'string', 'class', 'class_declaration',
+  'class_heritage', 'function_expression', 'function_declaration', 'generator_function',
+  'generator_function_declaration', 'arrow_function', 'call_expression', 'new_expression',
+  'await_expression', 'yield_expression', 'with_statement', 'debugger_statement',
+  'member_expression', 'subscript_expression', 'assignment_expression',
+  'augmented_assignment_expression', 'spread_element', 'ternary_expression', 'binary_expression',
+  'unary_expression', 'update_expression', 'sequence_expression', 'template_string',
+  'template_substitution', 'regex', 'meta_property', 'arguments', 'class_body', 'field_definition',
+  'formal_parameters', 'class_static_block', 'rest_pattern', 'method_definition', 'pair',
+  'pair_pattern', 'computed_property_name', 'property_identifier', 'shorthand_property_identifier',
+  'shorthand_property_identifier_pattern', 'statement_identifier',
+]);
 const functions = new Set(['function_expression','function_declaration','generator_function','generator_function_declaration','arrow_function','method_definition']);
 const metrics = ['cognitive', 'cyclomatic', 'statements'];
 
 export function prepare(parsedTree, source, fileId) {
   if (!parsedTree?.rootNode) throw new TypeError('Expected a parsed JavaScript tree');
+  const root = parsedTree.rootNode;
+  const {starts, ends, range} = sourceLocations(source);
+  const {tree, issues, comments, unsafe} = copySyntax(root, range);
+  const {functions, ownerByNode} = findOuters(tree, source, fileId);
+  const diagnostics = buildDiagnostics(issues, ownerByNode, fileId, range);
+  const presentation = buildPresentation(starts, ends, comments, unsafe, root.hasError);
+  return {tree, functions, ownerByNode, diagnostics, presentation};
+}
+
+function sourceLocations(source) {
   // ECMAScript recognizes CR, LF, LS and PS; CRLF is one terminator.
   const starts = [0], ends = [];
   for (let i = 0; i < source.length; i++) {
@@ -25,6 +59,10 @@ export function prepare(parsedTree, source, fileId) {
     return {row: lo, column: index - starts[lo]};
   };
   const range = (startIndex, endIndex) => ({startIndex, endIndex, startPosition: position(startIndex), endPosition: position(endIndex)});
+  return {starts, ends, range};
+}
+
+function copySyntax(root, range) {
   const comments = [], unsafe = [], issues = [];
   function copy(n, field = null, parent = null) {
     const loc = range(n.startIndex, n.endIndex);
@@ -44,7 +82,12 @@ export function prepare(parsedTree, source, fileId) {
     for (let i = 0; i < n.childCount; i++) node.children.push(copy(n.child(i), n.fieldNameForChild(i), n));
     return node;
   }
-  const tree = copy(parsedTree.rootNode), records = [], ownerByNode = new Map();
+  const tree = copy(root);
+  return {tree, issues, comments, unsafe};
+}
+
+function findOuters(tree, source, fileId) {
+  const records = [], ownerByNode = new Map();
   const text = node => source.slice(node.startIndex, node.endIndex);
   function assign(node, owner = null, parent = null) {
     const enclosing = owner;
@@ -69,6 +112,10 @@ export function prepare(parsedTree, source, fileId) {
     }
   }
   assign(tree);
+  return {functions:records, ownerByNode};
+}
+
+function buildDiagnostics(issues, ownerByNode, fileId, range) {
   const diagnostics = [];
   for (const {node, category, code, message, local, complete} of issues) {
     const owners = new Set([ownerByNode.get(node)]);
@@ -78,6 +125,10 @@ export function prepare(parsedTree, source, fileId) {
     collectOwners(node);
     for (const owner of owners) diagnostics.push({code,category,message,fileId,range:range(node.startIndex,node.endIndex),owner,affectedMetrics:[...metrics],affectsFunctionDiscovery:owner === null || (category === 'unsupported' ? !complete : !local)});
   }
+  return diagnostics;
+}
+
+function buildPresentation(starts, ends, comments, unsafe, hasError) {
   const sorted = values => values.sort((a,b) => a.startIndex-b.startIndex || a.endIndex-b.endIndex);
   sorted(comments); sorted(unsafe);
   const lineAnnotations = [];
@@ -85,9 +136,9 @@ export function prepare(parsedTree, source, fileId) {
   for (let row=0; row<starts.length; row++) {
     const end=ends[row];
     while(cursor<unsafe.length && unsafe[cursor].startIndex<end) furthest=Math.max(furthest,unsafe[cursor++].endIndex);
-    lineAnnotations.push({row,contentEndIndex:end,endIndex:furthest>end || parsedTree.rootNode.hasError ? null : end});
+    lineAnnotations.push({row,contentEndIndex:end,endIndex:furthest>end || hasError ? null : end});
   }
-  return {tree,functions:records,ownerByNode,diagnostics,presentation:{comments:parsedTree.rootNode.hasError ? [] : comments,unsafeCommentRanges:unsafe,lineAnnotations}};
+  return {comments:hasError ? [] : comments,unsafeCommentRanges:unsafe,lineAnnotations};
 }
 
 
