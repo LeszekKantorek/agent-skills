@@ -1,62 +1,115 @@
 import ts from '../../../vendor/tree-sitter/tree-sitter.js';
 import {parseMacroArguments, hasMetavariable} from './macro-arguments.mjs';
 
-// The original token tree supplies candidate separators. The match wrapper is
-// only a grammar probe; none of its selector, arm or delimiters are copied.
+const prefix = 'fn __fragment(){ match __value {\n';
+const suffix = '\n=> () } }';
+
+const isComment = node => node.type.endsWith('_comment');
+const isSignificant = node => !isComment(node);
+
+function hasInvalidSyntax(node) {
+  return node.type === 'ERROR' || node.isMissing || node.children.some(hasInvalidSyntax);
+}
+
+function onlySignificantNamedChild(node) {
+  const children = node?.namedChildren.filter(isSignificant);
+  return children?.length === 1 ? children[0] : null;
+}
+
+function isCandidateSeparator(tokens, index) {
+  return tokens[index].type === ',' && tokens[index - 1].type !== ',' && tokens[index + 1].type !== ',';
+}
+
+function parseProbeArm(root, wrapped, fragmentEnd) {
+  if (hasInvalidSyntax(root) || root.namedChildCount !== 1 || root.endIndex !== wrapped.length) return null;
+
+  const fn = root.namedChild(0);
+  const statement = onlySignificantNamedChild(fn.childForFieldName('body'));
+  const match = statement?.namedChild(0);
+  const block = match?.childForFieldName('body');
+  const arm = onlySignificantNamedChild(block);
+  if (fn.type !== 'function_item' || fn.childForFieldName('name')?.text !== '__fragment'
+      || statement?.namedChildCount !== 1 || match?.type !== 'match_expression'
+      || match.childForFieldName('value')?.text !== '__value' || arm?.type !== 'match_arm') return null;
+
+  const pattern = arm.childForFieldName('pattern');
+  const value = arm.childForFieldName('value');
+  if (!pattern || pattern.startIndex < prefix.length || pattern.endIndex > fragmentEnd
+      || value?.type !== 'unit_expression' || value.startIndex !== fragmentEnd + 4) return null;
+
+  const children = arm.children.filter(isSignificant);
+  const [armPattern, arrow, armValue] = children;
+  if (children.length !== 3 || armPattern.id !== pattern.id || arrow.type !== '=>'
+      || arrow.startIndex !== fragmentEnd + 1 || armValue.id !== value.id) return null;
+  return {block, arm, pattern};
+}
+
+// Everything in the fragment must be covered by the pattern (including its
+// guard), comments, or whitespace. Attributes on the synthetic arm cannot disappear.
+function coversFragment(wrapped, fragmentEnd, {block, arm, pattern}) {
+  const isFragmentSpan = node => node.startIndex >= prefix.length && node.endIndex <= fragmentEnd;
+  const comments = [...block.children.filter(isComment), ...arm.children.filter(isComment)];
+  const spans = [pattern, ...comments.filter(isFragmentSpan)].sort((left, right) => left.startIndex - right.startIndex);
+  let cursor = prefix.length;
+  for (const span of spans) {
+    if (span.startIndex < cursor || wrapped.slice(cursor, span.startIndex).trim()) return false;
+    cursor = span.endIndex;
+  }
+  return wrapped.slice(cursor, fragmentEnd).trim() === '';
+}
+
+// Follow pattern nodes only. A const expression can contain its own match.
+function isStructuralPattern(node) {
+  return node.type === 'field_pattern' || node.type === 'remaining_field_pattern'
+    || (node.type.endsWith('_pattern') && node.children.some(isStructuralPattern));
+}
+
+function recoverPattern(language, content, patternStart, expressionText, expressionStart, copy) {
+  const wrapped = prefix + content + suffix;
+  const fragmentEnd = prefix.length + content.length;
+  const parser = new ts.Parser();
+  let tree;
+  try {
+    parser.setLanguage(language);
+    tree = parser.parse(wrapped);
+    const probe = parseProbeArm(tree.rootNode, wrapped, fragmentEnd);
+    if (!probe || !coversFragment(wrapped, fragmentEnd, probe)) return null;
+
+    const {pattern} = probe;
+    const guard = pattern.childForFieldName('condition');
+    if (hasMetavariable(pattern)) return null;
+    const isPatternChild = node => isSignificant(node) && node.startIndex !== guard?.startIndex;
+    const actual = pattern.namedChildren.filter(isPatternChild);
+    if (actual.length !== 1 || !isStructuralPattern(actual[0])) return null;
+
+    const recovered = parseMacroArguments(language, expressionText, expressionStart, copy);
+    const shift = patternStart - prefix.length;
+    recovered.push(copy(actual[0], 'pattern', shift));
+    if (guard) recovered.push(copy(guard, 'guard', shift));
+    return recovered;
+  } finally {
+    tree?.delete();
+    parser.delete();
+  }
+}
+
+// Try each eligible separator in token order. The match wrapper is only a
+// grammar probe; none of its selector, arm or delimiters are copied.
 export function parseMacroPattern(language, tokenTree, source, offset, copy) {
-  const tokens = tokenTree.children.slice(1, -1).filter(n => !n.type.endsWith('_comment'));
-  const prefix = 'fn __fragment(){ match __value {\n', suffix = '\n=> () } }';
-  const endToken = tokens.at(-1)?.type === ',' ? tokens.length - 1 : tokens.length;
-  const bad = n => n.type === 'ERROR' || n.isMissing || n.children.some(bad);
-  for (let i = 1; i < endToken - 1; i++) {
-    if (tokens[i].type !== ',' || tokens[i-1].type === ',' || tokens[i+1].type === ',') continue;
-    const a = tokens[0].startIndex + offset, b = tokens[i-1].endIndex + offset;
-    const c = tokens[i+1].startIndex + offset, d = tokens[endToken-1].endIndex + offset;
-    const expression = parseMacroArguments(language, source.slice(a, b), a, (_n, field) => field);
-    if (!expression || expression.filter(f => f === 'argument').length !== 1) continue;
-    const content = source.slice(c, d), parser = new ts.Parser();
-    let tree;
-    try {
-      parser.setLanguage(language);
-      tree = parser.parse(prefix + content + suffix);
-      const root = tree.rootNode;
-      if (bad(root) || root.namedChildCount !== 1 || root.endIndex !== prefix.length + content.length + suffix.length) continue;
-      const fn = root.namedChild(0), body = fn.childForFieldName('body');
-      const statement = body?.namedChildren.filter(n => !n.type.endsWith('_comment'));
-      const match = statement?.length === 1 && statement[0].namedChildCount === 1 ? statement[0].namedChild(0) : null;
-      const block = match?.childForFieldName('body');
-      const arms = block?.namedChildren.filter(n => !n.type.endsWith('_comment'));
-      const arm = arms?.length === 1 ? arms[0] : null;
-      const pattern = arm?.childForFieldName('pattern'), value = arm?.childForFieldName('value');
-      if (fn.type !== 'function_item' || fn.childForFieldName('name')?.text !== '__fragment' || match?.type !== 'match_expression' || match.childForFieldName('value')?.text !== '__value' || arm?.type !== 'match_arm' || !pattern || value?.type !== 'unit_expression' || value.startIndex !== prefix.length + content.length + 4 || pattern.startIndex < prefix.length || pattern.endIndex > prefix.length + content.length) continue;
-      const significant = arm.children.filter(n => !n.type.endsWith('_comment'));
-      if (significant.length !== 3 || significant[0].id !== pattern.id || significant[1].type !== '=>' || significant[1].startIndex !== prefix.length + content.length + 1 || significant[2].id !== value.id) continue;
-      // Everything supplied by the original fragment must be either the
-      // pattern (including its guard), a comment, or whitespace. In particular,
-      // attributes attached to the synthetic arm must not disappear.
-      const spans = [pattern, ...block.children.filter(n => n.type.endsWith('_comment')), ...arm.children.filter(n => n.type.endsWith('_comment'))]
-        .filter(n => n.startIndex >= prefix.length && n.endIndex <= prefix.length + content.length)
-        .sort((x,y) => x.startIndex - y.startIndex);
-      let cursor = prefix.length, covered = true;
-      const wrapped = prefix + content + suffix;
-      for (const span of spans) {
-        if (span.startIndex < cursor || wrapped.slice(cursor, span.startIndex).trim()) { covered = false; break; }
-        cursor = span.endIndex;
-      }
-      if (!covered || wrapped.slice(cursor, prefix.length + content.length).trim()) continue;
-      const guard = pattern.childForFieldName('condition');
-      if (hasMetavariable(pattern)) continue;
-      const actual = pattern.namedChildren.filter(n => !n.type.endsWith('_comment') && (!guard || n.startIndex !== guard.startIndex));
-      // Follow only pattern nodes. A const expression inside a pattern can
-      // contain its own match, whose fields say nothing about this pattern.
-      const structural = n => n.type === 'field_pattern' || n.type === 'remaining_field_pattern' || (n.type.endsWith('_pattern') && n.children.some(structural));
-      if (actual.length !== 1 || !structural(actual[0])) continue;
-      const recovered = parseMacroArguments(language, source.slice(a, b), a, copy);
-      const shift = c - prefix.length;
-      recovered.push(copy(actual[0], 'pattern', shift));
-      if (guard) recovered.push(copy(guard, 'guard', shift));
-      return recovered;
-    } finally { tree?.delete(); parser.delete(); }
+  const tokens = tokenTree.children.slice(1, -1).filter(isSignificant);
+  const tokenCount = tokens.at(-1)?.type === ',' ? tokens.length - 1 : tokens.length;
+  for (let i = 1; i < tokenCount - 1; i++) {
+    if (!isCandidateSeparator(tokens, i)) continue;
+    const expressionStart = tokens[0].startIndex + offset;
+    const expressionEnd = tokens[i - 1].endIndex + offset;
+    const expressionText = source.slice(expressionStart, expressionEnd);
+    const fields = parseMacroArguments(language, expressionText, expressionStart, (_node, field) => field);
+    if (!fields || fields.filter(field => field === 'argument').length !== 1) continue;
+
+    const patternStart = tokens[i + 1].startIndex + offset;
+    const patternEnd = tokens[tokenCount - 1].endIndex + offset;
+    const recovered = recoverPattern(language, source.slice(patternStart, patternEnd), patternStart, expressionText, expressionStart, copy);
+    if (recovered) return recovered;
   }
   return null;
 }
