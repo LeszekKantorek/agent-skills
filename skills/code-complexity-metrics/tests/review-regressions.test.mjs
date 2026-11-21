@@ -1,3 +1,4 @@
+import {explainRow} from './explain-rows.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {productionCognitive} from './production-score.mjs';
@@ -157,7 +158,7 @@ function selection_value(){1+(a?1:2);}
     const report=JSON.parse(result.stdout);
     const expected={chain:2,returned_closure:0,trailing_item:0,constant:2,computed:0,labeled:0,standalone:0,switch_blocks:1,class_value:0,selection_value:1};
     assert.deepEqual(report.summary,{files:2,functions_found:10,functions_presented:10,function_discovery_complete:true,has_errors:false});
-    for(const fn of report.functions) assert.deepEqual(fn.metrics,{cognitive_complexity:expected[fn.name]},fn.name);
+    for(const fn of report.functions) assert.equal(fn.metrics.cognitive_complexity,expected[fn.name],fn.name);
     const written=run(...args,'--output','report.json');
     assert.equal(written.status,0,written.stderr);
     assert.equal(written.stdout,'');
@@ -174,16 +175,19 @@ function selection_value(){1+(a?1:2);}
     const blocks=[...explained.stdout.matchAll(/```(?:rust|javascript)\n([\s\S]*?)\n```/g)];
     assert.equal(blocks.length,10);
     blocks.forEach((match,index)=>{
-      const lines=match[1].split('\n');
+      const lines=match[1].split('\n').slice(1);
       let total=0;
+      const halstead=[0,0,0,0];
       for(const line of lines) {
-        const annotation=line.match(/\/\/ Cognitive: ([+\d]+)$/);
+        const annotation=explainRow(line);
         assert.ok(annotation,line);
-        total+=Number(annotation[1]);
+        total+=annotation.cognitive;
+        for (let i=0;i<halstead.length;i++) halstead[i]+=annotation.halstead[i];
       }
-      const name=report.functions[index].name;
+      const {name,halstead_counts:{n1,n2,eta1,eta2}}=report.functions[index];
       assert.equal(total,expected[name],name);
+      assert.deepEqual(halstead,[n1,n2,eta1,eta2],name);
     });
-    assert.match(explained.stdout,/&& x>0 \{\} +\/\/ Cognitive: \+1/);
+    assert.match(explained.stdout,/&& x>0 \{\} +\| +\+1 +\|/);
   } finally { await rm(dir,{recursive:true,force:true}); }
 });

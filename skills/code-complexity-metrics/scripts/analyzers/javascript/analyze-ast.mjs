@@ -41,7 +41,7 @@ export function prepare(parsedTree, source, fileId) {
   const {functions, ownerByNode} = findOuters(tree, source, fileId);
   const diagnostics = buildDiagnostics(issues, ownerByNode, fileId, range);
   const presentation = buildPresentation(starts, ends, comments, unsafe, root.hasError);
-  return {tree, functions, ownerByNode, diagnostics, presentation};
+  return {tree, functions, ownerByNode, diagnostics, presentation, halsteadOccurrences: []};
 }
 
 function sourceLocations(source) {
@@ -139,7 +139,7 @@ function buildDiagnostics(issues, ownerByNode, fileId, range) {
     // that region. A sibling outside it does not inherit the diagnostic.
     function collectOwners(n) { owners.add(ownerByNode.get(n)); for (const c of n.children) collectOwners(c); }
     collectOwners(node);
-    for (const owner of owners) diagnostics.push({code,category,message,fileId,range:range(node.startIndex,node.endIndex),owner,affectedMetrics:['cognitive'],affectsFunctionDiscovery:owner === null || (category === 'unsupported' ? !complete : !local)});
+    for (const owner of owners) diagnostics.push({code,category,message,fileId,range:range(node.startIndex,node.endIndex),owner,affectedMetrics:['cognitive','halstead'],affectsFunctionDiscovery:owner === null || (category === 'unsupported' ? !complete : !local)});
   }
   return diagnostics;
 }

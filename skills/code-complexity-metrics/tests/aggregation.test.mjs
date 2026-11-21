@@ -12,7 +12,7 @@ function manual(fileId='a') {
  const a=outerId(fileId,0),b=outerId(fileId,1),c=outerId(fileId,2);
  const cross=n(2,score(2)), rootA=n(0,score(1),[cross]), outside=n(2,score(4)), container=n(1,score(),[outside]), rootB=n(3), rootC=n(4), tree=n(0,score(),[rootA,container,rootB,rootC]);
  const ownerByNode=new Map([[tree,null],[rootA,a],[cross,b],[container,null],[outside,a],[rootB,b],[rootC,c]]);
- return {fileId,source:{fileId,source:'x\nx\nx\nx\nx\nx'},diagnostics:[],analysis:{tree,functions:[{id:a,name:'same',root:rootA},{id:b,name:'same',root:rootB},{id:c,name:'free',root:rootC}],ownerByNode,diagnostics:[],presentation:{comments:[],unsafeCommentRanges:[],lineAnnotations:Array.from({length:6},(_,row)=>({row,contentEndIndex:row*2+1,endIndex:row*2+1}))}}};
+ return {fileId,source:{fileId,source:'x\nx\nx\nx\nx\nx'},diagnostics:[],analysis:{tree,functions:[{id:a,name:'same',root:rootA},{id:b,name:'same',root:rootB},{id:c,name:'free',root:rootC}],ownerByNode,halsteadOccurrences:[],diagnostics:[],presentation:{comments:[],unsafeCommentRanges:[],lineAnnotations:Array.from({length:6},(_,row)=>({row,contentEndIndex:row*2+1,endIndex:row*2+1}))}}};
 }
 test('ownership, row sums, partial metrics and discovery are independent',()=>{
  const f=manual(), [a,b,c]=f.analysis.functions.map(x=>x.id), d=diagnostic(f.fileId,a,['cognitive']), e=diagnostic(f.fileId,b,['cognitive']), x=diagnostic(f.fileId,null,[],true);
@@ -76,6 +76,6 @@ test('multiple errors retain source order and unsafe annotations leave code inta
  const d=(row,code)=>({...diagnostic(f.fileId,owner),code,range:{startIndex:row*2,endIndex:row*2+1,startPosition:{row,column:0},endPosition:{row,column:1}}});
  f.analysis.diagnostics=[d(2,'B'),d(0,'A')];f.analysis.presentation.lineAnnotations[2].endIndex=null;
  const a=aggregate([f]), record=a.functions[0];assert.equal(record.error.code,'A');assert.equal(a.diagnostics.length,2);
- const {report,selected}=makeReport(a);const text=markdown(report,selected,a,true);assert.match(text,/Wiersz 3: Cognitive: 0 \/\/ error: B: x/);
- assert.match(text,/x \/\/ Cognitive: 0 \/\/ error: A: x/);
+ const {report,selected}=makeReport(a);const text=markdown(report,selected,a,true);assert.match(text,/Wiersz 3: Cognitive: 0 .*\/\/ error: B: x/);
+ assert.match(text,/x +(?:\| +0 +){4}\| +0 \/\/ error: A: x/);
 });

@@ -24,8 +24,12 @@ test('pinned clone: deterministic output, manual examples, output file and uncha
  const expected={clamp:0,svgElement:1,setAttributes:1,validHeading:2,events:6};
  for(const [name,expectedScore] of Object.entries(expected)) {
   const m=report.functions.find(f=>f.name===name)?.metrics;
-  assert.deepEqual(m,{cognitive_complexity:expectedScore},name);
+  assert.equal(m?.cognitive_complexity,expectedScore,name);
  }
+ // return Math.max(min, Math.min(max, value))
+ const clamp=report.functions.find(f=>f.name==='clamp');
+ assert.deepEqual(clamp.halstead_counts,{n1:5,n2:7,eta1:3,eta2:4});
+ assert.equal(clamp.metrics.halstead_volume,12*Math.log2(7));
  const temp=await mkdtemp(path.join(os.tmpdir(),'metrics-e2e-'));
  try {
   const dest=path.join(temp,'report.json');const result=run(...args,'--format','json','--output',dest);
@@ -42,7 +46,7 @@ test('pinned clone glob scope covers both languages and remains deterministic',a
  const a=run(...args),b=run(...args);assert.equal(a.status,0);assert.equal(b.status,0);assert.equal(a.stdout,b.stdout);
  const report=JSON.parse(a.stdout);
  const owner=report.functions.find(f=>f.name==='native_owners_cannot_cross_threads_or_be_shared');
- assert.ok(owner); assert.equal(owner.error,null); assert.deepEqual(owner.metrics,{cognitive_complexity:0});
+ assert.ok(owner); assert.equal(owner.error,null); assert.equal(owner.metrics.cognitive_complexity,0);
  assert.ok(!report.diagnostics.some(d=>d.name==='native_owners_cannot_cross_threads_or_be_shared'));
  assert.equal(report.summary.files,68);assert.equal(paths.filter(f=>f.endsWith('.rs')).length,34);assert.equal(paths.filter(f=>f.endsWith('.js')).length,34);
  assert.equal('analyzed_files' in report,false);

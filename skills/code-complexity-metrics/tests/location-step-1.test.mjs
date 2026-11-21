@@ -10,8 +10,9 @@ import { runInNewContext } from 'node:vm';
 import { makeReport } from '../scripts/public-report.mjs';
 
 const metrics = { cognitive: 0 };
+const halstead = { volume: 0, n1: 0, n2: 0, eta1: 0, eta2: 0 };
 function record(id, fileId, name, startIndex, endIndex, row, column) {
-  return { id, fileId, name, metrics, rootRange: {
+  return { id, fileId, name, metrics, halstead, rootRange: {
     startIndex, endIndex, startPosition: { row, column }, endPosition: { row, column: column + endIndex - startIndex },
   } };
 }

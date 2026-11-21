@@ -94,6 +94,6 @@ test('semicolon list Cognitive points appear on original lines in CLI explain', 
     const cli = fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
     const invoke = (...args) => spawnSync(process.execPath, [cli, '--path', 'input.rs', ...args], {cwd:dir, encoding:'utf8'});
     const result = invoke(); assert.equal(result.status,0); assert.equal(JSON.parse(result.stdout).functions[0].metrics.cognitive_complexity,1);
-    const explain = invoke('--explain'); assert.equal(explain.status,0); assert.match(explain.stdout, /ready && limit\(\).*Cognitive: \+1/);
+    const explain = invoke('--explain'); assert.equal(explain.status,0); assert.match(explain.stdout, /ready && limit\(\).* \| +\+1 +\|/);
   } finally { await rm(dir, {recursive:true, force:true}); }
 });

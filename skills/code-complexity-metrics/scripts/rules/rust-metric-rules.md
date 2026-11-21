@@ -1,6 +1,6 @@
 # Rust metric rules
 
-Rules version: **2.0**.
+Rules version: **2.1**.
 
 The [generic metric rules](generic-metric-rules.md) define Cognitive scoring and function ownership. Apply the [recursive composition rules](generic-metric-rules.md#recursive-composition) at every nesting level.
 
@@ -62,3 +62,17 @@ fn condition(ready: bool) {
 }
 // Cognitive: 1
 ```
+
+## Halstead Volume
+
+Use the [shared Halstead rules](generic-metric-rules.md#halstead-volume) and classify the following Rust syntax by its AST role.
+
+| Construct | Classification |
+| --- | --- |
+| Declarations and control flow | Count declaration and control keywords, including `let`, `const`, `static`, `if`, `match`, `for`, `loop`, `else`, `return`, and `break`. Count an initializer's `=` once. A match arm's arrow contributes `match_arm`. |
+| Calls, access, and operators | Count `call`, `member_access`, and `index` for the respective operations. Count written operators such as `?` for propagation. Use separate keys for unary negation, dereference, and borrowing. |
+| Nested functions and closures | Map `fn` to `function` and a closure's parameter delimiter pair to one `=>` operator. The JavaScript counterparts use the same keys. Visit the nested header and body. |
+| Identifiers, literals, and patterns | Count identifiers, type names, field names, labels, lifetimes, and literals by category and exact spelling. Visit path segments as operands. Count alternatives, ranges, and rest as pattern operators. Count each negative number in a pattern as one operand with its sign. Skip structural separators and delimiters. |
+| Macros and attributes | Count recognized written macro arguments using their recovered roles and source ranges. The macro name and invocation delimiters add no occurrences. Skip macro definition templates and attributes. Unsupported argument syntax retains its diagnostic. |
+
+Both operations in `obj.run()` contribute, because the expression accesses a field and invokes it. The operands are `obj` and `run`. The parentheses add no separate operation.

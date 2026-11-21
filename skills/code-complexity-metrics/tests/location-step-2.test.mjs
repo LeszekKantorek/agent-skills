@@ -8,7 +8,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { makeReport } from '../scripts/public-report.mjs';
 const script = fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
 const run = (cwd, args, nodeArgs = []) => spawnSync(process.execPath, [...nodeArgs, script, ...args], { cwd, encoding: 'utf8' });
-const rec = (id, row, column, length, name = id) => ({ id, name, fileId: path.resolve('a.js'), rootRange: { startIndex: row * 100 + column, endIndex: row * 100 + column + length, startPosition: { row: row - 1, column: column - 1 } }, metrics: { cognitive: 0 } });
+const halstead = { volume: 0, n1: 0, n2: 0, eta1: 0, eta2: 0 };
+const rec = (id, row, column, length, name = id) => ({ id, name, fileId: path.resolve('a.js'), rootRange: { startIndex: row * 100 + column, endIndex: row * 100 + column + length, startPosition: { row: row - 1, column: column - 1 } }, metrics: { cognitive: 0 }, halstead });
 const diag = (owner, code, fileId = path.resolve('a.js')) => ({ owner, code, message: 'problem', fileId, category: 'parse' });
 test('projects and sorts diagnostics numerically before filtering, with file lengths', () => {
   const functions = [rec('ten',10,1,2), rec('two',2,10,3), rec('short',2,2,1)];
@@ -16,7 +17,7 @@ test('projects and sorts diagnostics numerically before filtering, with file len
   const input = { functions, diagnostics, sources: new Map([[path.resolve('a.js'), { source: '😀' }]]), files: [], hasErrors: true, functionDiscoveryComplete: false };
   const report = makeReport(input, 'no-match').report;
   assert.deepEqual(report.functions, []);
-  assert.deepEqual(Object.keys(makeReport(input).report.functions[0]), ['name','location','metrics','error']);
+  assert.deepEqual(Object.keys(makeReport(input).report.functions[0]), ['name','location','metrics','halstead_counts','error']);
   assert.deepEqual(report.diagnostics, [
     { error:'file: problem',name:null,location:'a.js:0:0:2' },
     { error:'a: problem',name:'short',location:'a.js:2:2:1' },

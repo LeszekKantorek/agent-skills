@@ -1,3 +1,4 @@
+import {explainRow} from './explain-rows.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
@@ -16,9 +17,9 @@ test('CLI preserves broken files and filters outer after analysis',async()=>{
   const r=run(dir,'--path','good.js','--path','bad.rs','--path','other.xyz','--filter','one');
   assert.equal(r.status,1); const report=JSON.parse(r.stdout);
   assert.deepEqual(report.summary,{files:3,functions_found:3,functions_presented:1,function_discovery_complete:false,has_errors:true});
-  assert.deepEqual(Object.keys(report.functions[0]),['name','location','metrics','error']);
+  assert.deepEqual(Object.keys(report.functions[0]),['name','location','metrics','halstead_counts','error']);
   assert.equal(report.functions[0].location,'good.js:1:1:30');
-  assert.deepEqual(report.functions[0].metrics,{cognitive_complexity:1});
+  assert.equal(report.functions[0].metrics.cognitive_complexity,1);
   assert.equal('analyzed_files' in report,false);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
@@ -42,7 +43,7 @@ test('CSV format writes filtered metrics and explain still produces Markdown',as
   assert.equal(r.status,0);assert.equal(r.stdout,'');
   const csv=await readFile(path.join(dir,'report.csv'),'utf8');
   assert.match(csv,/^# Code Complexity Metrics\n# Files: 1; functions found: 2; functions presented: 1; function discovery complete: true; has errors: false\n/);
-  assert.match(csv,/Name,Location,Cognitive,Error\nprocess,"a,b\.js:1:1:27",0,\n$/);
+  assert.match(csv,/Name,Location,Cognitive,Halstead Volume,N1,N2,Eta1,Eta2,Error\nprocess,"a,b\.js:1:1:27",0,2,1,1,1,1,\n$/);
   const explained=run(dir,'--path','a,b.js','--format','csv','--explain');
   assert.equal(explained.status,0);assert.match(explained.stdout,/Files: 1; functions found: 2; functions presented: 2;/);assert.match(explained.stdout,/```javascript/);
  } finally {await rm(dir,{recursive:true,force:true})}
@@ -53,14 +54,19 @@ test('explain increments sum to reported metrics, including operator lines',asyn
   await writeFile(path.join(dir,'a.js'),'function process(a){\n if(a){\n  const inner=()=>{\n   if(ready()){save();}\n  };\n }\n}');
   const r=run(dir,'--path','a.js','--explain'); assert.equal(r.status,0);
   assert.match(r.stdout,/Cognitive: 4/);
+  const json=run(dir,'--path','a.js'); assert.equal(json.status,0);
+  const {halstead_counts}=JSON.parse(json.stdout).functions[0];
   const body=r.stdout.split('```javascript\n')[1].split('\n```')[0];
   let total=0;
-  for(const line of body.split('\n')) {
-   const annotation=line.match(/\/\/ Cognitive: (\+?\d+)$/);
+  const halstead=[0,0,0,0];
+  for(const line of body.split('\n').slice(1)) {
+   const annotation=explainRow(line);
    assert.ok(annotation,line);
-   total+=Number(annotation[1]);
+   total+=annotation.cognitive;
+   for (let i=0;i<halstead.length;i++) halstead[i]+=annotation.halstead[i];
   }
   assert.equal(total,4);
+  assert.deepEqual(halstead,[halstead_counts.n1,halstead_counts.n2,halstead_counts.eta1,halstead_counts.eta2]);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('explain shows increments for an outer inside template interpolation',async()=>{
@@ -76,7 +82,7 @@ test('scoring comments remain outside multiline literals',async()=>{
  try {
   await writeFile(path.join(dir,'a.js'),'function f(){\n const s = `first\nsecond\nlast`;\n return s;\n}');
   const r=run(dir,'--path','a.js','--explain');assert.equal(r.status,0);
-  assert.match(r.stdout,/`first\nsecond\nlast`; +\/\//);
+  assert.match(r.stdout,/`first\nsecond\nlast`; +\| +0 +\|/);
   assert.match(r.stdout,/Wiersz 2:/);assert.match(r.stdout,/Wiersz 3:/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
@@ -133,7 +139,7 @@ test('UC-14 public CLI compares equivalent Rust and JS with manual expectations'
   await writeFile(path.join(dir,'b.rs'),'fn f(){if a {let g=||{if b {if c {work();}}};}}');
   const r=run(dir,'--path','*.js','--path','*.rs','--format','json');assert.equal(r.status,0);
   const report=JSON.parse(r.stdout); assert.deepEqual(report.summary,{files:2,functions_found:2,functions_presented:2,function_discovery_complete:true,has_errors:false});
-  for(const item of report.functions) assert.deepEqual(item.metrics,{cognitive_complexity:8});
+  for(const item of report.functions) assert.equal(item.metrics.cognitive_complexity,8);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('UC-15 assigns logical operators to their lines and sums increments',async()=>{
@@ -141,8 +147,11 @@ test('UC-15 assigns logical operators to their lines and sums increments',async(
  try {
   await writeFile(path.join(dir,'a.js'),'function f(){\n return a &&\n b ||\n c;\n}');
   const r=run(dir,'--path','a.js','--explain','--format','json');assert.equal(r.status,0);
-  assert.match(r.stdout,/return a && +\/\/ Cognitive: \+1$/m);
-  assert.match(r.stdout,/b \|\| +\/\/ Cognitive: \+1$/m);
+  const rows=r.stdout.split('\n').map(explainRow).filter(Boolean);
+  assert.deepEqual(rows.slice(1,3), [
+   {fragment:' return a &&',cognitive:1,halstead:[2,1,2,1],error:undefined},
+   {fragment:' b ||',cognitive:1,halstead:[1,1,1,1],error:undefined},
+  ]);
   assert.match(r.stdout,/Cognitive: 2/);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
@@ -156,9 +165,9 @@ test('UC-09/16 JSON and Markdown present the same selected names and totals',asy
   assert.deepEqual(report.summary,{files:1,functions_found:3,functions_presented:2,function_discovery_complete:true,has_errors:false});
   assert.deepEqual(report.functions.map(f=>f.name),['process','save']);
   assert.match(md.stdout,/functions found: 3; functions presented: 2/);
-  assert.match(md.stdout,/\| Name\s+\| Location\s+\|\s+Cognitive \|\s+Error \|/);
-  assert.match(md.stdout,/\| process\s+\| a\.js:1:1:27\s+\|\s+0 \|\s+\|$/m);
-  assert.match(md.stdout,/\| save\s+\| a\.js:[^|]+\|\s+0 \|\s+\|$/m);
+  assert.match(md.stdout,/\| Name \| Location \| Cognitive \| Halstead Volume \| N1 \| N2 \| Eta1 \| Eta2 \| Error \|/);
+  assert.match(md.stdout,/\| process \| a\.js:1:1:27 \| 0 \| 2\.00 \| 1 \| 1 \| 1 \| 1 \| {2}\|$/m);
+  assert.match(md.stdout,/\| save \| a\.js:[^|]+\| 0 \| 0\.00 \| 0 \| 0 \| 0 \| 0 \| {2}\|$/m);
   assert.doesNotMatch(md.stdout,/Analyzed files:/);
   const none=run(dir,'--path','a.js','--filter','null');assert.equal(JSON.parse(none.stdout).summary.functions_presented,0);
  } finally {await rm(dir,{recursive:true,force:true})}

@@ -15,7 +15,7 @@ test('physical error lines mask all owners and partial reports are published',as
   const report=JSON.parse(j.stdout); assert.deepEqual(report.functions.map(f=>f.metrics.cognitive_complexity),[0,0,0]);
   assert.ok(report.functions[0].error); assert.ok(report.functions[1].error); assert.equal(report.functions[2].error,null);
   for(const format of ['markdown','csv']) { const x=run('--format',format); assert.equal(x.status,1); assert.match(x.stderr,/unsupported/); assert.match(x.stdout,/Error/); }
-  const explain=run('--explain'); assert.equal(explain.status,1); assert.match(explain.stdout,/Cognitive: 0 \/\/ error:/);
+  const explain=run('--explain'); assert.equal(explain.status,1); assert.match(explain.stdout,/(?: \| +0){5} \/\/ error:/);
   await writeFile(path.join(dir,'out.json'),'old'); const output=run('--output','out.json'); assert.equal(output.status,1); assert.equal(output.stdout,''); assert.equal(JSON.parse(await readFile(path.join(dir,'out.json'),'utf8')).functions.length,3);
   await writeFile(path.join(dir,'input.rs'),'unknown! { fn hidden() {} => custom }\nfn good(){a();}');
   const separated=JSON.parse(run().stdout); assert.equal(separated.functions[0].metrics.cognitive_complexity,0); assert.equal(separated.functions[0].error,null);

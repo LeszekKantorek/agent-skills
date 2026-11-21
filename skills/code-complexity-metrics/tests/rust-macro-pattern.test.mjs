@@ -69,6 +69,6 @@ test('pattern points in CLI and explain share original lines', async () => {
     const cli = fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
     const invoke = (...args) => spawnSync(process.execPath, [cli, '--path', 'input.rs', ...args], {cwd:dir, encoding:'utf8'});
     const result = invoke(); assert.equal(result.status,0); assert.equal(JSON.parse(result.stdout).functions[0].metrics.cognitive_complexity,1);
-    const explain = invoke('--explain'); assert.equal(explain.status,0); assert.match(explain.stdout, /ok\(\) && ready\(\).*Cognitive: \+1/);
+    const explain = invoke('--explain'); assert.equal(explain.status,0); assert.match(explain.stdout, /ok\(\) && ready\(\).* \| +\+1 +\|/);
   } finally { await rm(dir, {recursive:true, force:true}); }
 });

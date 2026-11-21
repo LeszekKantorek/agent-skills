@@ -39,7 +39,7 @@ test('5.4 preserves immutable shape, owners and diagnostics during Cognitive sco
  const id=p.functions[0].id;
  assert.deepEqual(
   p.diagnostics.map(d=>[d.range.startIndex,d.range.endIndex,d.owner,d.affectedMetrics,d.affectsFunctionDiscovery]),
-  [[22,38,id,['cognitive'],false],[22,25,id,['cognitive'],false],[25,34,id,['cognitive'],false],[34,38,id,['cognitive'],false]],
+  [[22,38,id,['cognitive','halstead'],false],[22,25,id,['cognitive','halstead'],false],[25,34,id,['cognitive','halstead'],false],[34,38,id,['cognitive','halstead'],false]],
  );
 });
 test('5.4 each logical assignment is not a decision',async()=>{

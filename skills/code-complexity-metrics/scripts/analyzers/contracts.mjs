@@ -10,18 +10,22 @@
  * @typedef {{type: string, field: string|null, isNamed: boolean, startPosition: Position, endPosition: Position, startIndex: number, endIndex: number, children: AnalyzeNode[], score: Score}} AnalyzeNode
  * @typedef {string} OuterId
  * @typedef {{id: OuterId, name: string|null, root: AnalyzeNode}} ReportedFunction
- * @typedef {{code: string, category: 'input'|'parse'|'unsupported'|'internal', message: string, fileId: string, range: Range|null, owner: OuterId|null, affectedMetrics: Array<'cognitive'>, affectsFunctionDiscovery: boolean}} Diagnostic
+ * @typedef {'cognitive'|'halstead'} Metric
+ * @typedef {{node: AnalyzeNode, category: 'operator', key: string, range: Range} | {node: AnalyzeNode, category: 'operand', kind: string, key: string, range: Range}} HalsteadOccurrence
+ * @typedef {{code: string, category: 'input'|'parse'|'unsupported'|'internal', message: string, fileId: string, range: Range|null, owner: OuterId|null, affectedMetrics: Metric[], affectsFunctionDiscovery: boolean}} Diagnostic
  * @typedef {{comments: Range[], unsafeCommentRanges: Range[], lineAnnotations: Array<{row: number, contentEndIndex: number, endIndex: number|null}>}} Presentation
  * @typedef {{fileId: string, source: string}} SourceFile
  * @typedef {{fileId: string, source: SourceFile|null, analysis: Prepared|null, diagnostics: Diagnostic[]}} FileResult
- * @typedef {{code: string, category: 'input'|'internal', message: string, fileId: null, range: null, owner: null, affectedMetrics: Array<'cognitive'>, affectsFunctionDiscovery: boolean}} RunError
- * @typedef {{tree: AnalyzeNode, functions: ReportedFunction[], ownerByNode: Map<AnalyzeNode, OuterId|null>, diagnostics: Diagnostic[], presentation: Presentation}} Prepared
+ * @typedef {{code: string, category: 'input'|'internal', message: string, fileId: null, range: null, owner: null, affectedMetrics: Metric[], affectsFunctionDiscovery: boolean}} RunError
+ * @typedef {{tree: AnalyzeNode, functions: ReportedFunction[], ownerByNode: Map<AnalyzeNode, OuterId|null>, diagnostics: Diagnostic[], presentation: Presentation, halsteadOccurrences: HalsteadOccurrence[]}} Prepared
  * @typedef {{prepare(parsedTree: object, source: string, fileId: string): Prepared, analyze(parsedTree: object, source: string, fileId: string): Prepared}} LanguageAnalyzer
  *
  * prepare creates an independent, acyclic tree with zero scores, one owner map
  * entry per node, and no parser objects. Every non-null owner names a function;
  * each function root is in the tree and owned by its ID. analyze prepares a new
- * tree and runs the language's three independent passes. Presentation data also
+ * tree and measures Cognitive Complexity and Halstead occurrences separately.
+ * Each Halstead occurrence has an owning node and a nonempty range within it.
+ * prepare leaves this occurrence list empty. Presentation data also
  * survives parser disposal. If the original parser root has errors, comment ranges
  * are empty and every line annotation is outside the source block; recovery
  * cannot establish lexical boundaries safely. Each lineAnnotations row is zero-based; endIndex

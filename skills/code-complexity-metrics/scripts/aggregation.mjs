@@ -1,6 +1,7 @@
-const KEYS = ['cognitive'];
+const scoreKeys = ['cognitive'];
+const diagnosticMetrics = new Set([...scoreKeys, 'halstead']);
 const zero = () => ({cognitive: 0});
-const add = (to, from) => { for (const k of KEYS) to[k] += from[k]; };
+const add = (to, from) => { for (const k of scoreKeys) to[k] += from[k]; };
 const range = n => ({startIndex: n.startIndex, endIndex: n.endIndex, startPosition: {...n.startPosition}, endPosition: {...n.endPosition}});
 const validPosition = p => p && Number.isSafeInteger(p.row) && p.row >= 0 && Number.isSafeInteger(p.column) && p.column >= 0;
 function validRange(r, length, rows) {
@@ -59,7 +60,7 @@ function plausibleDiagnosticRange(r, source, rows) {
 function validDiagnostic(d, fileId, source, rows, owners = null, starts = null) {
   const allowsUnlocated = d && (d.category === 'input' || d.category === 'internal' ||
     (d.category === 'unsupported' && d.code === 'UNSUPPORTED_LANGUAGE' && source === null && d.owner === null));
-  return d && typeof d.code === 'string' && typeof d.message === 'string' && ['input','parse','unsupported','internal'].includes(d.category) && d.fileId === fileId && (d.owner === null || (typeof d.owner === 'string' && (!owners || owners.has(d.owner)))) && Array.isArray(d.affectedMetrics) && d.affectedMetrics.every(k=>KEYS.includes(k)) && typeof d.affectsFunctionDiscovery === 'boolean' && ((d.range === null && allowsUnlocated) || (source !== null && (starts ? exactRange(d.range,source.length,starts) : plausibleDiagnosticRange(d.range,source,rows))));
+  return d && typeof d.code === 'string' && typeof d.message === 'string' && ['input','parse','unsupported','internal'].includes(d.category) && d.fileId === fileId && (d.owner === null || (typeof d.owner === 'string' && (!owners || owners.has(d.owner)))) && Array.isArray(d.affectedMetrics) && d.affectedMetrics.every(k=>diagnosticMetrics.has(k)) && typeof d.affectsFunctionDiscovery === 'boolean' && ((d.range === null && allowsUnlocated) || (source !== null && (starts ? exactRange(d.range,source.length,starts) : plausibleDiagnosticRange(d.range,source,rows))));
 }
 // Semantic identity ignores property order at every level, while respecting
 // multiplicity within each producer's own list.
@@ -71,7 +72,8 @@ function canonical(value) {
 function diagnosticKey(d) { return canonical({...d, affectedMetrics: [...d.affectedMetrics].sort()}); }
 function collect(analysis, fileId, source) {
   const invalidAnalysis = !analysis || !Array.isArray(analysis.functions)
-    || !(analysis.ownerByNode instanceof Map) || !Array.isArray(analysis.diagnostics);
+    || !(analysis.ownerByNode instanceof Map) || !Array.isArray(analysis.diagnostics)
+    || !Array.isArray(analysis.halsteadOccurrences);
   if (invalidAnalysis) throw Error('Invalid analysis contract');
 
   const starts = presentationStarts(analysis.presentation, source);
@@ -83,6 +85,7 @@ function collect(analysis, fileId, source) {
   const ownerByNode = analysis.ownerByNode;
   const seen = collectTreeScores(tree, ownerByNode, records, source.length, starts);
   validateFunctionRoots(ownerByNode, seen, records);
+  collectHalsteadOccurrences(analysis.halsteadOccurrences, ownerByNode, records, source, starts);
 
   if (!analysis.diagnostics.every(d => validDiagnostic(d, fileId, source, rows, records, starts))) {
     throw Error('Invalid analysis diagnostic');
@@ -107,7 +110,9 @@ function createFunctionRecords(functions, fileId) {
       || !(typeof f.name === 'string' || f.name === null) || !f.root;
     if (invalidOrDuplicate) throw Error('Invalid or duplicate function');
 
-    records.set(f.id, {id: f.id, name: f.name, root: f.root, knownScore: zero(), byRow: new Map()});
+    records.set(f.id, {
+      id: f.id, name: f.name, root: f.root, knownScore: zero(), byRow: new Map(), halsteadOccurrences: [],
+    });
   }
   return records;
 }
@@ -123,7 +128,7 @@ function collectTreeScores(tree, ownerByNode, records, sourceLength, starts) {
     seen.add(node);
 
     const owner = validateScoredNode(node, ownerByNode, records, sourceLength, starts);
-    if (owner !== null && KEYS.some(key => node.score[key] !== 0)) {
+    if (owner !== null && scoreKeys.some(key => node.score[key] !== 0)) {
       addNodeScore(records.get(owner), node);
     }
     for (let i = node.children.length - 1; i >= 0; i--) stack.push(node.children[i]);
@@ -143,7 +148,7 @@ function validateScoredNode(node, ownerByNode, records, sourceLength, starts) {
   if (owner !== null && (typeof owner !== 'string' || !records.has(owner))) throw Error('Unknown owner');
 
   const invalidData = !Array.isArray(node.children) || !node.score
-    || !KEYS.every(key => Number.isSafeInteger(node.score[key]) && node.score[key] >= 0)
+    || !scoreKeys.every(key => Number.isSafeInteger(node.score[key]) && node.score[key] >= 0)
     || !exactRange(node, sourceLength, starts);
   if (invalidData) throw Error('Invalid node score, children or range');
   return owner;
@@ -162,6 +167,24 @@ function validateFunctionRoots(ownerByNode, seen, records) {
     if (!seen.has(record.root) || ownerByNode.get(record.root) !== record.id) {
       throw Error('Function root is missing or has wrong owner');
     }
+  }
+}
+
+function collectHalsteadOccurrences(occurrences, ownerByNode, records, source, starts) {
+  for (const occurrence of occurrences) {
+    if (!occurrence || typeof occurrence !== 'object') throw Error('Invalid Halstead occurrence');
+    const {node, category, key, kind, range: location} = occurrence;
+    const record = records.get(ownerByNode.get(node));
+    if (!record || !exactRange(location, source.length, starts)
+        || location.startIndex < node.startIndex || location.endIndex > node.endIndex
+        || location.startIndex === location.endIndex || typeof key !== 'string' || !key) {
+      throw Error('Invalid Halstead occurrence');
+    }
+    const validCategory = category === 'operator' && kind === undefined
+      || category === 'operand' && typeof kind === 'string' && kind.length > 0
+        && key === source.slice(location.startIndex, location.endIndex);
+    if (!validCategory) throw Error('Invalid Halstead occurrence');
+    record.halsteadOccurrences.push({category, key, kind, range: location});
   }
 }
 
@@ -287,6 +310,26 @@ function projectRecord(record, diagnostics, located, masks) {
   record.error = relevant[0] ?? unlocated[0] ?? null;
   record.metrics = zero();
   for (const score of record.byRow.values()) add(record.metrics, score);
+  record.halsteadOccurrences = record.halsteadOccurrences.filter(event => !masks.has(event.range.startPosition.row + 1));
+  record.halstead = summarizeHalstead(record.halsteadOccurrences);
+}
+
+function summarizeHalstead(occurrences) {
+  const operators = new Set(), operands = new Set();
+  let n1 = 0, n2 = 0;
+  for (const {category, key, kind} of occurrences) {
+    if (category === 'operator') {
+      n1++;
+      operators.add(key);
+    } else {
+      n2++;
+      operands.add(JSON.stringify([kind, key]));
+    }
+  }
+  const eta1 = operators.size, eta2 = operands.size;
+  const vocabulary = eta1 + eta2;
+  const volume = vocabulary <= 1 ? 0 : (n1 + n2) * Math.log2(vocabulary);
+  return {volume, n1, n2, eta1, eta2};
 }
 
 function invalidContractDiagnostic(fileId, message) {

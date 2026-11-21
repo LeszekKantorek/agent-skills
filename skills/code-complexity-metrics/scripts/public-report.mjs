@@ -63,12 +63,15 @@ export function makeReport(aggregate, filter) {
     return { path, row: 0, column: 0, length, location: `${path}:0:0:${length}`, name: null, error: publicText(errorText(diagnostic)) };
   }).sort(compareDiagnostics);
   const publicDiagnostics = diagnostics.filter(d => d.location !== null).map(({ error, name, location }) => ({ error, name, location }));
-  const functions = selected.map(record => ({
-    name: functionLocationsById.get(record.id).name,
-    location: functionLocationsById.get(record.id).location,
-    metrics: { cognitive_complexity: record.metrics.cognitive },
-    error: record.error ? publicText(errorText(record.error)) : null,
-  }));
+  const functions = selected.map(record => {
+    const {volume, ...counts} = record.halstead;
+    return {
+      ...functionLocationsById.get(record.id),
+      metrics: {cognitive_complexity: record.metrics.cognitive, halstead_volume: volume},
+      halstead_counts: counts,
+      error: record.error ? publicText(errorText(record.error)) : null,
+    };
+  });
   return {
     report: {
       version: publicText(applicationVersion),
@@ -114,16 +117,68 @@ export function diagnosticText(report) {
 }
 export function csv(report) {
   const lines = ['# Code Complexity Metrics', `# ${meta(report)}`, `# ${version(report)}`,
-    'Name,Location,Cognitive,Error'];
+    'Name,Location,Cognitive,Halstead Volume,N1,N2,Eta1,Eta2,Error'];
   for (const record of report.functions) {
-    const cognitive = record.metrics.cognitive_complexity;
-    lines.push([record.name ?? '', record.location, cognitive === null ? 'null' : cognitive, record.error].map(csvCell).join(','));
+    const {cognitive_complexity: cognitive, halstead_volume: volume} = record.metrics;
+    const {n1, n2, eta1, eta2} = record.halstead_counts;
+    lines.push([record.name ?? '', record.location, cognitive === null ? 'null' : cognitive,
+      volume, n1, n2, eta1, eta2, record.error].map(csvCell).join(','));
   }
   return lines.join('\n') + '\n';
 }
+
+function halsteadDeltasByRow(occurrences) {
+  const rows = new Map();
+  const operators = new Set(), operands = new Set();
+  // Credit distinct items to their first retained source row.
+  const ordered = occurrences.toSorted((left, right) => left.range.startIndex - right.range.startIndex);
+  for (const {category, kind, key, range} of ordered) {
+    const row = range.startPosition.row + 1;
+    if (!rows.has(row)) rows.set(row, {n1: 0, n2: 0, eta1: 0, eta2: 0});
+    const delta = rows.get(row);
+    if (category === 'operator') {
+      delta.n1++;
+      if (!operators.has(key)) delta.eta1++;
+      operators.add(key);
+    } else {
+      delta.n2++;
+      const operand = JSON.stringify([kind, key]);
+      if (!operands.has(operand)) delta.eta2++;
+      operands.add(operand);
+    }
+  }
+  return rows;
+}
+
+const explainColumns = ['Cognitive', 'Halstead N1', 'Halstead N2', 'Halstead Eta1', 'Halstead Eta2'];
+const deltaText = value => value > 0 ? `+${value}` : '0';
+
+function fragmentWidth(text) {
+  let width = 0;
+  for (let i = 0; i < text.length; i++) width += text[i] === '\t' ? 8 - width % 8 : 1;
+  return width;
+}
+
+function renderExplainTable(entries) {
+  const label = 'Fragment';
+  let width = label.length;
+  for (const {fragment, values} of entries) {
+    if (values) width = Math.max(width, Math.min(fragmentWidth(fragment), 120));
+  }
+  function format(fragment, values) {
+    const padded = fragment + ' '.repeat(Math.max(0, width - fragmentWidth(fragment)));
+    return padded + ' | ' + values.map((value, index) => value.padStart(explainColumns[index].length)).join(' | ');
+  }
+  const header = format(label, explainColumns);
+  const body = entries.map(({fragment, values, error, separator}) =>
+    (values ? format(fragment, values) + error : fragment) + separator).join('');
+  return header + '\n' + body;
+}
+
 function renderExplain(record, aggregate) {
   const source = aggregate.sources.get(record.fileId).source;
   const presentation = aggregate.presentation.get(record.fileId);
+  const halsteadRows = halsteadDeltasByRow(record.halsteadOccurrences);
   const chars = source.split('');
   for (const comment of presentation.comments) {
     for (let index = comment.startIndex; index < comment.endIndex; index++) {
@@ -143,6 +198,7 @@ function renderExplain(record, aggregate) {
   const rows = new Set();
   for (let row = record.rootRange.startPosition.row + 1; row <= record.rootRange.endPosition.row + 1; row++) rows.add(row);
   for (const row of record.byRow.keys()) rows.add(row);
+  for (const row of halsteadRows.keys()) rows.add(row);
   for (const row of record.errorRows?.keys() ?? []) rows.add(row);
   const groups = [];
   for (const row of [...rows].sort((a, b) => a - b)) {
@@ -150,44 +206,62 @@ function renderExplain(record, aggregate) {
     if (last && row === last.at(-1) + 1) last.push(row);
     else groups.push([row]);
   }
-  function annotation(row) {
+  function rowValues(row) {
     const points = record.byRow.get(row)?.cognitive ?? 0;
     const incomplete = record.metrics.cognitive === null;
-    const display = points > 0 ? `+${points}` : incomplete ? 'brak znanego wkładu' : '0';
+    const cognitive = incomplete && !points ? '—' : deltaText(points);
+    const delta = halsteadRows.get(row);
+    return [cognitive, ...['n1', 'n2', 'eta1', 'eta2'].map(key => deltaText(delta?.[key] ?? 0))];
+  }
+  function rowError(row) {
     const errors = record.errorRows?.get(row);
-    return `Cognitive: ${display}${incomplete && points ? ' (częściowe)' : ''}`
-      + (errors ? ` // error: ${errors.map(d => publicText(errorText(d))).join('; ')}` : '');
+    return errors ? ` // error: ${errors.map(d => publicText(errorText(d))).join('; ')}` : '';
   }
   let output = '';
   for (const group of groups) {
-    const content = group.map((row, index) => {
-      const inline = presentation.lineAnnotations[row - 1].endIndex === null ? '' : ` // ${annotation(row)}`;
-      return lines[row - 1] + inline + (index < group.length - 1 ? separators[row - 1] : '');
-    }).join('');
+    const entries = group.map((row, index) => ({
+      fragment: lines[row - 1],
+      values: presentation.lineAnnotations[row - 1].endIndex === null ? null : rowValues(row),
+      error: rowError(row),
+      separator: index < group.length - 1 ? separators[row - 1] : '',
+    }));
+    const content = renderExplainTable(entries);
     let longest = 0;
     for (const match of content.matchAll(/`+/g)) longest = Math.max(longest, match[0].length);
     const fence = '`'.repeat(Math.max(3, longest + 1));
     const language = record.fileId.endsWith('.rs') ? 'rust' : 'javascript';
-    output += `Wiersze ${group[0]}–${group.at(-1)}:\n\n${fence}${language}\n${content}\n${fence}\n\n`;
-    for (const row of group) {
-      if (presentation.lineAnnotations[row - 1].endIndex === null) output += `Wiersz ${row}: ${annotation(row)}\n\n`;
+    output += `${fence}${language}\n${content}\n${fence}\n\n`;
+    for (const [index, row] of group.entries()) {
+      const {values, error} = entries[index];
+      if (!values) {
+        const cells = rowValues(row).map((value, column) => `${explainColumns[column]}: ${value}`);
+        output += `Wiersz ${row}: ${cells.join(' | ')}${error}\n\n`;
+      }
     }
   }
   return output;
 }
+
 export function markdown(report, selected, aggregate, explain = false) {
   let output = `# Code Complexity Metrics\n\n${meta(report)}\n\n${version(report)}\n\n`;
   if (explain) {
     for (let index = 0; index < selected.length; index++) {
       const record = report.functions[index];
-      output += `## ${headerCell(record.name ?? '(anonymous)')} — ${headerCell(record.location)}\n\n`;
-      output += `Cognitive: ${label(record.metrics.cognitive_complexity)}\n\n`;
+      const {n1, n2, eta1, eta2} = record.halstead_counts;
+      output += `## ${headerCell(record.name ?? '(anonymous)')} — ${headerCell(record.location)}\n`;
+      output += `Cognitive: ${label(record.metrics.cognitive_complexity)}\n`;
+      output += `Halstead Volume: ${record.metrics.halstead_volume.toFixed(2)} (N1 = ${n1}, N2 = ${n2}, Eta1 = ${eta1}, Eta2 = ${eta2})\n\n`;
       output += renderExplain(selected[index], aggregate);
     }
   } else {
-    output += '| Name | Location | Cognitive | Error |\n| --- | --- | ---: | --- |\n';
+    output += '| Name | Location | Cognitive | Halstead Volume | N1 | N2 | Eta1 | Eta2 | Error |\n'
+      + '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n';
     for (const record of report.functions) {
-      output += `| ${cell(record.name ?? '(anonymous)')} | ${cell(record.location)} | ${label(record.metrics.cognitive_complexity)} | ${cell(record.error ?? '')} |\n`;
+      const {cognitive_complexity: cognitive, halstead_volume: volume} = record.metrics;
+      const {n1, n2, eta1, eta2} = record.halstead_counts;
+      const values = [cell(record.name ?? '(anonymous)'), cell(record.location), label(cognitive),
+        volume.toFixed(2), n1, n2, eta1, eta2, cell(record.error ?? '')];
+      output += `| ${values.join(' | ')} |\n`;
     }
     output += '\n';
   }

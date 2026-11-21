@@ -54,7 +54,7 @@ test('step 4: pinned supported syntax and diagnostics for unsupported or invalid
  const diagnostic=bad.diagnostics.find(d=>d.category==='unsupported' && d.owner===bad.functions[0].id);
  assert.ok(diagnostic?.range);
  assert.equal(diagnostic.affectsFunctionDiscovery,false);
- assert.deepEqual(diagnostic.affectedMetrics,['cognitive']);
+ assert.deepEqual(diagnostic.affectedMetrics,['cognitive','halstead']);
  assert.equal(bad.functions[1].name,'good');
  const invalid=await get('function f(){ let x = ; } function good(){}'); assert.ok(invalid.diagnostics.some(d=>d.category==='parse' && d.affectsFunctionDiscovery && d.range));
 });

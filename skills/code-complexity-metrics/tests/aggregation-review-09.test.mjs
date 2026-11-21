@@ -7,7 +7,7 @@ function input(fileId) {
  const child={type:'identifier',field:'name',isNamed:true,startIndex:0,endIndex:1,startPosition:position(0),endPosition:position(1),children:[],score:{cognitive:0}};
  const root={type:'function_declaration',field:null,isNamed:true,startIndex:0,endIndex:2,startPosition:position(0),endPosition:position(2),children:[child],score:{cognitive:1}};
  const diagnostic={code:'KNOWN',category:'parse',message:'known',fileId,range:{startIndex:0,endIndex:1,startPosition:position(0),endPosition:position(1)},owner:id,affectedMetrics:['cognitive'],affectsFunctionDiscovery:false};
- return {fileId,source:{fileId,source:'ab'},diagnostics:[],analysis:{tree:root,functions:[{id,name:'f',root}],ownerByNode:new Map([[root,id],[child,id]]),diagnostics:[diagnostic],presentation:{comments:[],unsafeCommentRanges:[],lineAnnotations:[{row:0,contentEndIndex:2,endIndex:2}]}}};
+ return {fileId,source:{fileId,source:'ab'},diagnostics:[],analysis:{tree:root,functions:[{id,name:'f',root}],ownerByNode:new Map([[root,id],[child,id]]),halsteadOccurrences:[],diagnostics:[diagnostic],presentation:{comments:[],unsafeCommentRanges:[],lineAnnotations:[{row:0,contentEndIndex:2,endIndex:2}]}}};
 }
 for(const [label,mutate] of [
  ['missing type',n=>delete n.type],['non-string type',n=>n.type=0],

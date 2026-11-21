@@ -78,10 +78,10 @@ for (const [label, source, expectedName, fragment] of cases) {
       }
       const report = JSON.parse(json.stdout), filtered = JSON.parse(selected.stdout);
       assert.equal(report.functions.length, 1);
-      assert.deepEqual(Object.keys(report.functions[0]), ['name', 'location', 'metrics', 'error']);
+      assert.deepEqual(Object.keys(report.functions[0]), ['name', 'location', 'metrics', 'halstead_counts', 'error']);
       assert.equal(report.functions[0].location, `input.js:1:${start + 1}:${fragment.length}`);
       assert.equal(report.functions[0].name, expectedName);
-      assert.deepEqual(report.functions[0].metrics, {cognitive_complexity: 0});
+      assert.equal(report.functions[0].metrics.cognitive_complexity, 0);
       assert.equal(filtered.functions.length, expectedName === null ? 0 : 1);
       if (expectedName !== null) assert.equal(filtered.functions[0].location, `input.js:1:${start + 1}:${fragment.length}`);
       assert.ok(explain.stdout.includes(fragment));
@@ -136,7 +136,7 @@ test('R19 field in outer keeps a single owner and original local scores', async 
     assert.deepEqual(report.functions.map(fn => fn.name), ['outer']);
     assert.equal(report.functions[0].metrics.cognitive_complexity,0);
     assert.equal(JSON.parse(filtered.stdout).functions.length, 0);
-    assert.match(explain.stdout, /class C \{ handler = \(\) => work\(\); \} \/\/ Cognitive: 0/);
+    assert.match(explain.stdout, /class C \{ handler = \(\) => work\(\); \} +\| +0 +\|/);
   } finally {
     rmSync(dir, {recursive: true, force: true});
   }

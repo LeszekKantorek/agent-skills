@@ -11,7 +11,7 @@ const range={startIndex:0,endIndex:1,startPosition:{row:0,column:0},endPosition:
 function input(fileId) {
  const id=JSON.stringify([fileId,0]),root={type:'function_declaration',field:null,isNamed:true,...range,children:[],score:{cognitive:1}};
  const valid={code:'KNOWN',category:'parse',message:'known',fileId,range,owner:id,affectedMetrics:[],affectsFunctionDiscovery:false};
- return {fileId,source:{fileId,source:'f'},diagnostics:[],analysis:{tree:root,functions:[{id,name:'f',root}],ownerByNode:new Map([[root,id]]),diagnostics:[valid],presentation:{comments:[],unsafeCommentRanges:[],lineAnnotations:[{row:0,contentEndIndex:1,endIndex:1}]}}};
+ return {fileId,source:{fileId,source:'f'},diagnostics:[],analysis:{tree:root,functions:[{id,name:'f',root}],ownerByNode:new Map([[root,id]]),halsteadOccurrences:[],diagnostics:[valid],presentation:{comments:[],unsafeCommentRanges:[],lineAnnotations:[{row:0,contentEndIndex:1,endIndex:1}]}}};
 }
 for(const category of ['parse','unsupported']) for(const producer of ['analysis','file']) test(`R09 diagnostic ${category} ${producer} requires source range`,()=>{
  for(const [suppliedRange,validRange] of [[null,false],[range,true],[{...range,endIndex:2},false]]) {

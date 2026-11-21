@@ -1,15 +1,15 @@
 ---
 name: code-complexity-metrics
-description: Measure and explain Cognitive Complexity for Rust and JavaScript functions with the bundled local analyzer. Use it to review control flow and compare revisions.
+description: Measure and explain Cognitive Complexity and Halstead Volume for Rust and JavaScript functions. Use the bundled local analyzer to review control flow, implementation size, and changes between revisions.
 ---
 
 # Code Complexity Metrics
 
 ## Scoring rules
 
-The [generic metric rules](scripts/rules/generic-metric-rules.md) define Cognitive Complexity scoring and recursive composition. Read them with the [Rust mappings](scripts/rules/rust-metric-rules.md) or [JavaScript mappings](scripts/rules/javascript-metric-rules.md) when interpreting or changing scoring rules.
+The [generic metric rules](scripts/rules/generic-metric-rules.md) define Cognitive Complexity, Halstead Volume, and recursive composition. Read them with the [Rust mappings](scripts/rules/rust-metric-rules.md) or [JavaScript mappings](scripts/rules/javascript-metric-rules.md) when interpreting or changing scoring rules.
 
-Rules version: **2.0**. Recognized Rust macro arguments contribute recursively; unsupported syntax produces diagnostics.
+Rules version: **2.1**. Recognized Rust macro arguments contribute recursively. Unsupported syntax produces diagnostics.
 
 Reports record the application version. Derive new combinations from shared rules. Request a new rule for a genuine classification gap or conflict.
 
@@ -34,9 +34,11 @@ Options:
   --format <format>        json (default), markdown, or csv.
   --filter "prefix|other"  Select outer names by case-sensitive prefixes.
                            Separate alternative prefixes with |.
-  --explain                Markdown with scoring annotations for each outer.
+  --explain                Markdown with source and numeric metric columns.
+                           Each outer includes its metrics and Halstead counts.
                            Overrides --format and omits the summary table.
-                           Unsafe annotations appear outside the code block.
+                           Rows inside multiline literals keep their original text.
+                           Their numbers appear below the block with the line number.
                            Original comments are omitted when parsing succeeds;
                            a parse error preserves the complete source text.
   --output "<file>"        Write the report to a file instead of standard output.
@@ -53,12 +55,16 @@ Notes:
 * All requested or matched files are analyzed, without additional exclusions.
 * Unmatched globs add no files. With no input files, the report is empty.
 * CSV begins with three # metadata lines before its header.
-* Function records contain `name`, `location`, `metrics`, and `error`. The metric is `cognitive_complexity`. Locations use
+* Function records contain `name`, `location`, `metrics`, `halstead_counts`, and `error`.
+  The metrics are `cognitive_complexity` and `halstead_volume`. The Halstead counts are
+  `n1` and `n2` for occurrences, and `eta1` and `eta2` for distinct items. Locations use
   `file:line:column:length`; read the three numeric fields from the right.
   Paths are relative to the working directory when possible. Lines and columns
   start at 1; columns and lengths use UTF-16 units.
 * Every error is reported on standard error and results in exit code 1. When at least one input is analyzed successfully or confirmed to have an unsupported language, a partial report is published to standard output or atomically to `--output`. A failed write leaves the destination unchanged. Input aliases are protected.
-* Cognitive Complexity excludes all contributions assigned to physical lines covered by diagnostics. `Error` identifies the first relevant diagnostic. An empty cell or JSON null means no relevant error. Discovery completeness remains a separate field.
+* Both metrics exclude contributions assigned to physical lines covered by diagnostics.
+  `Error` identifies the first relevant diagnostic. An empty cell or JSON null means no relevant error.
+  Discovery completeness remains a separate field.
 
 * 0  No error.
 * 1  An error occurred. A partial report can be published when a reliable input result is available.
@@ -68,15 +74,19 @@ Notes:
 
 Cognitive Complexity describes how control flow and nesting affect reading. Three flat `if` statements score 3, while three nested `if` statements score 6. Use the annotated source to see where those points come from.
 
+Halstead Volume measures the number and variety of operators and operands in the function body, including nested functions. It can flag a large implementation with simple control flow. Inspect which operations account for the volume and whether they belong together.
+
+The [JSON report schema](references/report-schema.json) defines the fields for automated comparisons.
+
 ### Investigate a result
 
-1. Select functions with increased scores or comparatively large values among functions with similar responsibilities.
+1. Select functions with increased scores or comparatively large values among functions with similar responsibilities. Keep the two metrics separate.
 
    * This skill defines no quality thresholds. Do not label code defective or recommend refactoring solely because of a score.
 
 2. Run `--explain` for the selected outer using its file and name prefix.
 
-   * Inspect the scored constructs and the original source, including comments that may be omitted from the explanation.
+   * Inspect Cognitive points and the Halstead count changes in the annotated source. Consult the original comments when needed.
    * Nested functions and closures contribute to the outer's result.
 
 3. Evaluate those constructs against the function's responsibilities and expected behavior during the separate code review.
@@ -88,7 +98,7 @@ Cognitive Complexity describes how control flow and nesting affect reading. Thre
 
 * Measure both revisions with the same analyzer, rules, input scope, and filter.
 * Match corresponding functions using their source context. Locations can change, and names need not be unique.
-* Explain changes in Cognitive Complexity using the changed constructs and required behavior.
+* Explain each metric's change using the changed constructs and required behavior. Use the Halstead counts to distinguish changes in occurrences from changes in the number of distinct items.
 * When code moves into another outer, inspect both functions. A lower score in the original function can reflect redistribution.
 * After an authorized refactoring, rerun measurements and relevant behavior tests. A lower score alone does not prove improvement.
 * Identify incomplete runs and functions with `Error` before comparing results. Scores with an error exclude affected physical lines.

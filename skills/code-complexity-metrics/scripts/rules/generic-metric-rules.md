@@ -1,13 +1,13 @@
 # Generic metric rules
 
-Rules version: **2.0**.
+Rules version: **2.1**.
 
 The shared rules and the relevant language document form one scoring profile:
 
 * [Rust metric rules](rust-metric-rules.md).
 * [JavaScript metric rules](javascript-metric-rules.md).
 
-Use the following rules to measure Cognitive Complexity:
+Use these rules for Cognitive Complexity and Halstead Volume.
 
 * This profile defines scoring and test expectations. Derive combinations of recognized constructs using the recursive composition rules below.
 * Measurements use written syntax, without resolving types or counting executed paths.
@@ -19,7 +19,7 @@ Use the following rules to measure Cognitive Complexity:
 * Each scored operation contributes once, regardless of reachability or execution count. One syntax construct can contain several operations. Nested bodies contribute even when uncalled.
 * Equivalent constructs and control-flow structures have the same scores across languages. Each language analyzer applies this requirement to its syntax.
 * Syntax without an equivalent does not require an artificial counterpart. Arbitrary semantically equivalent programs need not have the same scores.
-* A complete metric is a nonnegative integer. A result with an error is the known sum after excluding all contributions on affected physical lines; it is not a complete metric.
+* Cognitive Complexity is a nonnegative integer. Halstead Volume uses a nonnegative number calculated from integer counts. A result with an error describes the contributions that remain after excluding affected physical lines.
 * Reference totals are expectations derived from the rules, not a test execution report.
 
 Table examples use pseudocode; `outer`, `select`, and `closure` denote language-independent constructs. Points describe only the named construct unless the rule specifies a total. Language documents map syntax to these rules and define exceptions.
@@ -34,7 +34,8 @@ Tree-sitter parses the source with the language grammar. A registry selects the 
 
 1. Build Analyze AST, preserving parser node types, child fields, child order, relevant tokens, and original source locations.
 2. Complete syntax that requires additional parsing, such as Rust macro arguments. Finish the structure before scoring.
-3. Traverse recursively for Cognitive Complexity, writing only `score.cognitive`.
+3. Traverse for Cognitive Complexity and write each node's contribution to `score.cognitive`.
+4. Record Halstead occurrences within each reported function body.
 
 Each node starts with `score: { cognitive: 0 }`. This field contains only that node's local contributions. A node can represent several scored actions. A single action represented by multiple parser nodes contributes only once.
 
@@ -176,3 +177,31 @@ Complete Cognitive scores:
 | Loop-with-condition total | Loop containing an atomic-condition if | `outer f { while a { if b {} } }` | 3 |
 | Labeled-jump total | The same loop and if plus a labeled break | `outer f { label: while a { if b { break label; } } }` | 4 |
 | Nested-closure total | If in outer, then a closure with two nested if statements | `outer f { if a { let g = closure { if b { if c {} } }; } }` | 8 |
+
+## Halstead Volume
+
+Halstead Volume measures the number and variety of operators and operands in the written implementation.
+
+| Count | Meaning |
+| --- | --- |
+| `N1` | Operator occurrences |
+| `N2` | Operand occurrences |
+| `η1` | Distinct operator keys |
+| `η2` | Distinct operand keys |
+
+When `η1 + η2` is at most 1, Volume is 0. Otherwise, calculate `(N1 + N2) × log₂(η1 + η2)`.
+
+1. Visit the body of each outer. Include declarations, headers, and bodies of functions nested inside that body. The outer's own header is outside the Halstead scope.
+2. Classify written operations, identifiers, and literals using the language mappings. Operators use keys for the operation. Operand keys use a category and the exact source spelling.
+3. Record each occurrence once with its original source location. Exclude occurrences whose starting row is covered by a diagnostic, as for Cognitive Complexity.
+4. Add the surviving occurrences and count the distinct keys in each category separately. Calculate Volume once for the entire outer.
+
+The classification follows written syntax. It ignores structural punctuation and comments and visits written call targets and arguments. It includes uncalled nested bodies and skips analysis of callees outside the outer. Operations represented by both a token and its enclosing node contribute once.
+
+Use the same operator key for shared roles such as `call`, `index`, and `member_access`. For a method call such as `obj.run()`, access to the method and invocation are distinct operations. The enclosing parentheses add no occurrence.
+
+JSON and CSV retain the numeric result. Markdown displays Volume to two decimal places.
+
+`--explain` gives one Volume for the outer. The fragment column shows source lines. The five columns beside it show the Cognitive increment and additions to `N1`, `N2`, `eta1`, and `eta2`. Each distinct item increases `eta1` or `eta2` on its first retained source line.
+
+Adding the line values recovers the function totals. A dash marks an unavailable Cognitive increment. The report puts numbers for lines that cannot be annotated safely below the code block with the original line number.

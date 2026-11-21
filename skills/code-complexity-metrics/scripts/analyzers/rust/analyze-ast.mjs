@@ -20,7 +20,7 @@ export function prepare(parsedTree, source, fileId) {
   const {functions, ownerByNode} = findOuters(tree, source, fileId);
   const diagnostics = buildDiagnostics(issues, ownerByNode, fileId, range);
   const presentation = buildPresentation(source, lineStarts, comments, unsafe, root.hasError);
-  return {tree, functions, ownerByNode, diagnostics, presentation};
+  return {tree, functions, ownerByNode, diagnostics, presentation, halsteadOccurrences: []};
 }
 
 function sourceLocations(source) {
@@ -229,7 +229,7 @@ function buildDiagnostics(issues, ownerByNode, fileId, range) {
     const affectsFunctionDiscovery = origin === null || uncertainOwners.has(origin);
     for (const owner of owners) {
       diagnostics.push({code, category, message, fileId, range: range(node.startIndex, node.endIndex),
-        owner, affectedMetrics: ['cognitive'], affectsFunctionDiscovery});
+        owner, affectedMetrics: ['cognitive', 'halstead'], affectsFunctionDiscovery});
     }
   }
   return diagnostics;

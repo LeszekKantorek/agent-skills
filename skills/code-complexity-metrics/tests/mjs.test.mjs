@@ -21,7 +21,7 @@ test('mjs paths and globs analyze ES modules with locations in JSON and explain'
       const report = JSON.parse(json.stdout);
       assert.equal(report.functions.length, 1);
       assert.equal(report.functions[0].name, 'f');
-      assert.deepEqual(report.functions[0].metrics, {cognitive_complexity: 0});
+      assert.equal(report.functions[0].metrics.cognitive_complexity, 0);
       assert.match(report.functions[0].location, /^module\.mjs:3:/);
       const explain = run(['--explain']); assert.equal(explain.status, 0, explain.stderr);
       assert.match(explain.stdout, /module\.mjs:3:/);

@@ -1,6 +1,6 @@
 # JavaScript metric rules
 
-Rules version: **2.0**.
+Rules version: **2.1**.
 
 The [generic metric rules](generic-metric-rules.md) define shared scoring, ownership, and table notation. This document specifies JavaScript syntax mappings and exceptions.
 
@@ -74,3 +74,18 @@ function body(a, b, c) {
 ### Suspension, temporary name environments, and debugging
 
 `yield`, `yield*`, `with`, and `debugger` add no Cognitive points or depth of their own. Visit their children under the ordinary rules.
+
+## Halstead Volume
+
+Use the [shared Halstead rules](generic-metric-rules.md#halstead-volume) and classify the following JavaScript syntax by its AST role.
+
+| Construct | Classification |
+| --- | --- |
+| Declarations and patterns | Count `let`, `const`, `var`, and `using`. Count `=` once for an initializer or default. Visit binding identifiers and written property keys. Count rest and spread as distinct operators. Pattern delimiters and key separators add no occurrences. |
+| Calls and access | Count `call` for ordinary calls and tagged templates, `member_access` for property access, and `index` for bracket access. Use `new` and `import` for constructor expressions and dynamic imports. Each written `?.` adds `optional_chain` in addition to the operation it guards. |
+| Operators and control flow | Count written arithmetic, comparison, logical, assignment, update, and other operators recognized by the parser. Separate unary sign operators from binary addition and subtraction. A ternary expression contributes one `conditional` operator. |
+| Nested functions | Count the function declaration or arrow operator and visit its header and body. Count a written `async` and a generator's declaration marker. The outer's own header is excluded. |
+| Identifiers and literals | Count identifiers and labels. Count each number, Boolean, `null`, string, and regular expression as an operand with its exact spelling. |
+| Templates | A template without substitutions is one operand. An interpolated template contributes one `template_literal` operator, one operand for each nonempty text chunk between substitutions, and the ordinary contributions of each substitution expression. Keep escape spellings in their containing chunk. |
+
+For `const total = price + 2; return send(total);`, the five operators are `const`, `=`, `+`, `return`, and `call`. The five operands contain four distinct keys because `total` appears twice. The resulting Volume is `10 × log₂(9)`, about 31.70.

@@ -1,3 +1,4 @@
+import {explainRow} from './explain-rows.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, writeFile, rm} from 'node:fs/promises';
@@ -123,21 +124,21 @@ for (const [language, file, source, expected] of cases) {
         if (format === 'json') {
           const report = JSON.parse(output.stdout);
           assert.deepEqual(report.diagnostics, []);
-          assert.deepEqual(report.functions[0].metrics, {cognitive_complexity: expected});
+          assert.equal(report.functions[0].metrics.cognitive_complexity, expected);
           assert.equal(report.functions.length, 1);
           assert.equal(report.summary.has_errors, false);
           assert.equal(report.summary.function_discovery_complete, true);
         } else if (format === 'markdown') {
           const row = output.stdout.split('\n').find(line => line.startsWith('| f |'));
           assert.ok(row);
-          assert.equal(row.split('|').at(-3).trim(), String(expected));
+          assert.equal(row.split('|')[3].trim(), String(expected));
         } else if (format === 'csv') {
           const row = output.stdout.split('\n').find(line => line.startsWith('f,'));
           assert.ok(row);
-          assert.equal(row.split(',').at(-2), String(expected));
+          assert.equal(row.split(',')[2], String(expected));
         } else {
-          const annotation = `${source} // Cognitive: ${expected > 0 ? "+" + expected : "0"}`;
-          assert.ok(output.stdout.includes(annotation));
+          const row = output.stdout.split('\n').map(explainRow).find(row => row?.fragment === source);
+          assert.equal(row?.cognitive, expected);
           assert.ok(!output.stdout.includes('niepełna analiza'));
         }
       }

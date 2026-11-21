@@ -16,13 +16,14 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
   const complete = {cognitive: 1};
   const knownPartial = {cognitive: 2};
   const partial = {cognitive: null};
+  const halstead = {volume: 0, n1: 0, n2: 0, eta1: 0, eta2: 0};
   const result = {
     files: [{fileId, analyzed: true, functionDiscoveryComplete: false}],
     functions: [
       {id: id(0), fileId, name: 'ok', rootRange: range(0, split, 0, split),
-        metrics: complete, knownScore: complete, byRow: new Map([[1, complete]])},
+        metrics: complete, knownScore: complete, byRow: new Map([[1, complete]]), halstead, halsteadOccurrences: []},
       {id: id(1), fileId, name: 'bad', rootRange: range(split + 1, source.length, 1, source.length - split - 1),
-        metrics: partial, knownScore: knownPartial, byRow: new Map([[2, knownPartial]])},
+        metrics: partial, knownScore: knownPartial, byRow: new Map([[2, knownPartial]]), halstead, halsteadOccurrences: []},
     ],
     diagnostics: [
       {code: 'PARTIAL', category: 'unsupported', message: 'partial', fileId, owner: id(1),
@@ -48,7 +49,7 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
   assert.equal(json.summary.functions_found, 2);
   assert.equal(json.summary.function_discovery_complete, false);
   assert.equal(json.summary.has_errors, true);
-  assert.deepEqual(json.functions.map(fn => fn.metrics), [{cognitive_complexity: 1}, {cognitive_complexity: null}]);
+  assert.deepEqual(json.functions.map(fn => fn.metrics), [{cognitive_complexity: 1, halstead_volume: 0}, {cognitive_complexity: null, halstead_volume: 0}]);
   assert.deepEqual(json.functions.map(fn => fn.location), ['manual.js:1:1:15', 'manual.js:2:1:16']);
   assert.deepEqual(json.diagnostics.map(d => [d.error, d.name, d.location]), [['GLOBAL: discovery', null, `manual.js:0:0:${source.length}`], ['PARTIAL: partial', 'bad', 'manual.js:2:1:16']]);
 
@@ -58,16 +59,16 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
   assert.match(table, /GLOBAL/);
   assert.match(table, /PARTIAL/);
   const csvOutput = csv(report);
-  assert.match(csvOutput, /^ok,.*:1:1:15,1,$/m);
-  assert.match(csvOutput, /^bad,.*:2:1:16,null,$/m);
+  assert.match(csvOutput, /^ok,.*:1:1:15,1,0,0,0,0,0,$/m);
+  assert.match(csvOutput, /^bad,.*:2:1:16,null,0,0,0,0,0,$/m);
   const diagnosticOutput = diagnosticText(report);
   assert.match(diagnosticOutput, /GLOBAL/);
   assert.match(diagnosticOutput, /PARTIAL/);
   assert.match(diagnosticOutput, /:2:1:16/);
 
   const explain = markdown(report, selected, result, true);
-  assert.ok(explain.includes('function ok(){} // Cognitive: +1'));
-  assert.ok(explain.includes('function bad(){} // Cognitive: +2 (częściowe)'));
+  assert.match(explain, /function ok\(\)\{\} +\| +\+1 +\|/);
+  assert.match(explain, /function bad\(\)\{\} +\| +\+2 +\|/);
   assert.match(explain, /GLOBAL/);
   assert.match(explain, /PARTIAL/);
   for (const [filter, expectedNames] of [['ok', ['ok']], ['bad', ['bad']], ['none', []]]) {
@@ -87,8 +88,8 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
     const filteredExplain = markdown(filtered.report, filtered.selected, result, true);
     assert.match(filteredExplain, /PARTIAL/);
     if (filter === 'bad') {
-      assert.match(filteredCsv, /^bad,.*:2:1:16,null,$/m);
-      assert.ok(filteredExplain.includes('Cognitive: +2 (częściowe)'));
+      assert.match(filteredCsv, /^bad,.*:2:1:16,null,0,0,0,0,0,$/m);
+      assert.match(filteredExplain, /Cognitive: null \(niepełna analiza\)/); assert.match(filteredExplain, /function bad\(\)\{\} +\| +\+2 +\|/);
     }
     assert.match(diagnosticText(filtered.report), /GLOBAL/);
   }

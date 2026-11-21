@@ -52,7 +52,7 @@ test('record report and explain show the same unmasked points',async()=>{
  try {await writeFile(path.join(dir,'input.rs'),'fn f(){\n m!({"k":\n ready && verify()\n });\n}');
   const cli=fileURLToPath(new URL('../scripts/measure.mjs',import.meta.url));const run=(...args)=>spawnSync(process.execPath,[cli,'--path','input.rs',...args],{cwd:dir,encoding:'utf8'});
   const report=run();assert.equal(report.status,0);const f=JSON.parse(report.stdout).functions[0];assert.equal(f.metrics.cognitive_complexity,1);assert.equal(f.error,null);
-  const explain=run('--explain');assert.equal(explain.status,0);assert.match(explain.stdout,/Cognitive: 1/);assert.match(explain.stdout,/ready && verify\(\).*Cognitive: \+1/);
+  const explain=run('--explain');assert.equal(explain.status,0);assert.match(explain.stdout,/Cognitive: 1/);assert.match(explain.stdout,/ready && verify\(\).* \| +\+1 +\|/);
  } finally {await rm(dir,{recursive:true,force:true});}
 });
 
