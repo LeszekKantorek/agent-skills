@@ -39,6 +39,11 @@ function compareDiagnostics(a, b) {
     || (a.length === null ? b.length === null ? 0 : 1 : b.length === null ? -1 : a.length - b.length)
     || compare(a.error, b.error) || compare(a.name, b.name);
 }
+
+function publicCoverage({complete, unresolved_calls, reasons}) {
+  return {complete, unresolved_calls, reasons: reasons.map(publicText)};
+}
+
 export function makeReport(aggregate, filter) {
   const ordered = [...aggregate.functions].sort((a, b) =>
     compare(a.fileId, b.fileId) || a.rootRange.startIndex - b.rootRange.startIndex || compare(a.id, b.id));
@@ -65,13 +70,16 @@ export function makeReport(aggregate, filter) {
   const publicDiagnostics = diagnostics.filter(d => d.location !== null).map(({ error, name, location }) => ({ error, name, location }));
   const functions = selected.map(record => {
     const {volume, ...counts} = record.halstead;
+    const graph = record.callGraph;
     return {
       ...functionLocationsById.get(record.id),
-      metrics: {cognitive_complexity: record.metrics.cognitive, halstead_volume: volume},
+      metrics: {cognitive_complexity: record.metrics.cognitive, halstead_volume: volume, ...graph?.metrics},
       halstead_counts: counts,
+      ...(graph && {call_graph: {fan_in: publicCoverage(graph.fan_in), fan_out: publicCoverage(graph.fan_out)}}),
       error: record.error ? publicText(errorText(record.error)) : null,
     };
   });
+  const graph = aggregate.callGraph;
   return {
     report: {
       version: publicText(applicationVersion),
@@ -81,6 +89,7 @@ export function makeReport(aggregate, filter) {
         functions_presented: selected.length,
         function_discovery_complete: aggregate.functionDiscoveryComplete,
         has_errors: aggregate.hasErrors,
+        ...(graph && {call_graph: {scope: graph.scope, ...publicCoverage(graph)}}),
       },
       files: [...aggregate.files].sort((a, b) => compare(a.fileId, b.fileId))
         .map(file => ({ ...file, fileId: publicText(file.fileId) })),
@@ -104,9 +113,11 @@ function csvCell(value) {
   const text = String(value ?? '');
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
-function meta(report) {
+function meta(report, includeGraph = true) {
   const summary = report.summary;
-  return `Files: ${summary.files}; functions found: ${summary.functions_found}; functions presented: ${summary.functions_presented}; function discovery complete: ${summary.function_discovery_complete}; has errors: ${summary.has_errors}`;
+  const graph = includeGraph ? summary.call_graph : null;
+  const scope = graph ? `; call graph scope: ${graph.scope}; call graph complete: ${graph.complete}; unresolved calls: ${graph.unresolved_calls}` : '';
+  return `Files: ${summary.files}; functions found: ${summary.functions_found}; functions presented: ${summary.functions_presented}; function discovery complete: ${summary.function_discovery_complete}; has errors: ${summary.has_errors}${scope}`;
 }
 function version(report) {
   return `Version: ${report.version}`;
@@ -115,14 +126,32 @@ export function diagnosticText(report) {
   return report.diagnostics.map(diagnostic =>
     `${diagnostic.location}: ${diagnostic.error}${diagnostic.name === null ? '' : ` (${diagnostic.name})`}`).join('\n');
 }
+
+const metricColumns = ['Name', 'Location', 'Cognitive', 'Halstead Volume', 'N1', 'N2', 'Eta1', 'Eta2'];
+const graphColumns = ['Fan-In', 'Fan-Out', 'Instability', 'Fan-In complete', 'Fan-Out complete', 'Unresolved in', 'Unresolved out'];
+
+function instabilityText(value, fixed = false) {
+  if (value === null) return 'null';
+  return fixed ? value.toFixed(2) : value;
+}
+
+function graphValues(record, fixed = false) {
+  const {fan_in: fanIn, fan_out: fanOut, instability} = record.metrics;
+  const {fan_in: incoming, fan_out: outgoing} = record.call_graph;
+  return [fanIn, fanOut, instabilityText(instability, fixed), incoming.complete, outgoing.complete,
+    incoming.unresolved_calls, outgoing.unresolved_calls];
+}
+
 export function csv(report) {
+  const hasGraph = !!report.summary.call_graph;
+  const columns = [...metricColumns, ...(hasGraph ? graphColumns : []), 'Error'];
   const lines = ['# Code Complexity Metrics', `# ${meta(report)}`, `# ${version(report)}`,
-    'Name,Location,Cognitive,Halstead Volume,N1,N2,Eta1,Eta2,Error'];
+    columns.join(',')];
   for (const record of report.functions) {
     const {cognitive_complexity: cognitive, halstead_volume: volume} = record.metrics;
     const {n1, n2, eta1, eta2} = record.halstead_counts;
     lines.push([record.name ?? '', record.location, cognitive === null ? 'null' : cognitive,
-      volume, n1, n2, eta1, eta2, record.error].map(csvCell).join(','));
+      volume, n1, n2, eta1, eta2, ...(hasGraph ? graphValues(record) : []), record.error].map(csvCell).join(','));
   }
   return lines.join('\n') + '\n';
 }
@@ -242,25 +271,35 @@ function renderExplain(record, aggregate) {
   return output;
 }
 
+function explainGraphSummary(record) {
+  const {fan_in: fanIn, fan_out: fanOut, instability} = record.metrics;
+  const display = instability === null ? 'NaN' : instabilityText(instability, true);
+  return `Fan-In: ${fanIn} | Fan-Out: ${fanOut}\nInstability: ${display}\n\n`;
+}
+
 export function markdown(report, selected, aggregate, explain = false) {
-  let output = `# Code Complexity Metrics\n\n${meta(report)}\n\n${version(report)}\n\n`;
+  const hasGraph = !!report.summary.call_graph;
+  let output = `# Code Complexity Metrics\n\n${meta(report, !explain)}\n\n${version(report)}\n\n`;
   if (explain) {
     for (let index = 0; index < selected.length; index++) {
       const record = report.functions[index];
       const {n1, n2, eta1, eta2} = record.halstead_counts;
       output += `## ${headerCell(record.name ?? '(anonymous)')} — ${headerCell(record.location)}\n`;
       output += `Cognitive: ${label(record.metrics.cognitive_complexity)}\n`;
-      output += `Halstead Volume: ${record.metrics.halstead_volume.toFixed(2)} (N1 = ${n1}, N2 = ${n2}, Eta1 = ${eta1}, Eta2 = ${eta2})\n\n`;
+      output += `Halstead Volume: ${record.metrics.halstead_volume.toFixed(2)} (N1 = ${n1}, N2 = ${n2}, Eta1 = ${eta1}, Eta2 = ${eta2})\n`;
+      output += hasGraph ? explainGraphSummary(record) : '\n';
       output += renderExplain(selected[index], aggregate);
     }
   } else {
-    output += '| Name | Location | Cognitive | Halstead Volume | N1 | N2 | Eta1 | Eta2 | Error |\n'
-      + '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n';
+    const columns = [...metricColumns, ...(hasGraph ? graphColumns : []), 'Error'];
+    const alignment = columns.map((_, index) => index < 2 || index === columns.length - 1 ? '---' : '---:');
+    output += `| ${columns.join(' | ')} |\n| ${alignment.join(' | ')} |\n`;
     for (const record of report.functions) {
       const {cognitive_complexity: cognitive, halstead_volume: volume} = record.metrics;
       const {n1, n2, eta1, eta2} = record.halstead_counts;
       const values = [cell(record.name ?? '(anonymous)'), cell(record.location), label(cognitive),
-        volume.toFixed(2), n1, n2, eta1, eta2, cell(record.error ?? '')];
+        volume.toFixed(2), n1, n2, eta1, eta2, ...(hasGraph ? graphValues(record, true) : []),
+        cell(record.error ?? '')];
       output += `| ${values.join(' | ')} |\n`;
     }
     output += '\n';

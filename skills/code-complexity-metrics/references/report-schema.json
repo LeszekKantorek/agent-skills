@@ -2,9 +2,21 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Code Complexity Metrics report",
   "type": "object",
+  "$defs": {
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "complete": {"type": "boolean"},
+        "unresolved_calls": {"type": "integer", "minimum": 0},
+        "reasons": {"type": "array", "items": {"type": "string"}}
+      },
+      "required": ["complete", "unresolved_calls", "reasons"],
+      "additionalProperties": false
+    }
+  },
   "properties": {
     "version": {
-      "const": "2.0.0-dev.2"
+      "const": "2.0.0-dev.3"
     },
     "summary": {
       "type": "object",
@@ -26,6 +38,17 @@
         },
         "has_errors": {
           "type": "boolean"
+        },
+        "call_graph": {
+          "type": "object",
+          "properties": {
+            "scope": {"const": "project_files"},
+            "complete": {"type": "boolean"},
+            "unresolved_calls": {"type": "integer", "minimum": 0},
+            "reasons": {"type": "array", "items": {"type": "string"}}
+          },
+          "required": ["scope", "complete", "unresolved_calls", "reasons"],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -33,7 +56,8 @@
         "functions_found",
         "functions_presented",
         "function_discovery_complete",
-        "has_errors"
+        "has_errors",
+        "call_graph"
       ],
       "additionalProperties": false
     },
@@ -87,11 +111,27 @@
               "halstead_volume": {
                 "type": "number",
                 "minimum": 0
+              },
+              "fan_in": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fan_out": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "instability": {
+                "type": ["number", "null"],
+                "minimum": 0,
+                "maximum": 1
               }
             },
             "required": [
               "cognitive_complexity",
-              "halstead_volume"
+              "halstead_volume",
+              "fan_in",
+              "fan_out",
+              "instability"
             ],
             "additionalProperties": false
           },
@@ -127,6 +167,15 @@
             ],
             "additionalProperties": false
           },
+          "call_graph": {
+            "type": "object",
+            "properties": {
+              "fan_in": {"$ref": "#/$defs/coverage"},
+              "fan_out": {"$ref": "#/$defs/coverage"}
+            },
+            "required": ["fan_in", "fan_out"],
+            "additionalProperties": false
+          },
           "error": {
             "type": [
               "string",
@@ -139,6 +188,7 @@
           "location",
           "metrics",
           "halstead_counts",
+          "call_graph",
           "error"
         ],
         "additionalProperties": false

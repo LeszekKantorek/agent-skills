@@ -1,16 +1,16 @@
 # Generic metric rules
 
-Rules version: **2.1**.
+Rules version: **2.2**.
 
 The shared rules and the relevant language document form one scoring profile:
 
 * [Rust metric rules](rust-metric-rules.md).
 * [JavaScript metric rules](javascript-metric-rules.md).
 
-Use these rules for Cognitive Complexity and Halstead Volume.
+Use these rules for both local scores and call dependencies.
 
 * This profile defines scoring and test expectations. Derive combinations of recognized constructs using the recursive composition rules below.
-* Measurements use written syntax, without resolving types or counting executed paths.
+* Measurements use written syntax. The graph resolves a call when syntax identifies a unique target in the analyzed projects.
 * Rules are versioned independently of the parser. Parser updates do not change the scoring rules.
 * An **outer** is a function without an enclosing function. Only outers receive report records and contribute to reported function counts.
 * Module-level functions, methods, anonymous functions, and closures outside another function can be outers. Visibility and exports do not determine ownership.
@@ -205,3 +205,19 @@ JSON and CSV retain the numeric result. Markdown displays Volume to two decimal 
 `--explain` gives one Volume for the outer. The fragment column shows source lines. The five columns beside it show the Cognitive increment and additions to `N1`, `N2`, `eta1`, and `eta2`. Each distinct item increases `eta1` or `eta2` on its first retained source line.
 
 Adding the line values recovers the function totals. A dash marks an unavailable Cognitive increment. The report puts numbers for lines that cannot be annotated safely below the code block with the original line number.
+
+## Call graph
+
+The analyzer indexes Rust and JavaScript declarations in each project containing a report file. Files selected by `--path` and functions selected by `--filter` limit the report. The surrounding source contributes callers and targets to the graph. A function identity includes its declaration location and language context. Aliases of a declaration resolve to the same identity. Calls that have multiple possible targets or lack a known target remain unresolved.
+
+| Metric | Calculation |
+| --- | --- |
+| Fan-In | Count distinct functions that call the reported outer. Use the nearest caller, so two separate closures can count as two callers. |
+| Fan-Out | Count distinct targets called from the outer and its nested functions. A local closure can be a target. |
+| Instability | Divide Fan-Out by Fan-In plus Fan-Out. Use `null` when both are zero. |
+
+An edge from a function to itself adds no point. A call from file scope adds no Fan-In. Repeated calls to the same target contribute once in Fan-Out. Repeated calls from the same caller contribute once in Fan-In.
+
+Coverage describes the analyzed projects. An unresolved call inside an outer makes its Fan-Out partial. An unresolved call that could target an indexed definition can make Fan-In partial for the same language. Missing analysis can also make either direction partial. The counts use confirmed edges, and Instability inherits the directions' coverage. Diagnostics in files used only for the graph affect coverage. Report diagnostics describe the files selected for the report.
+
+`--explain` shows the three graph metrics for each selected outer. It displays `NaN` for Instability when both counts are zero. The source table shows local metric increments. Use the JSON report to inspect graph coverage.

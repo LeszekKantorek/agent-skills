@@ -157,7 +157,9 @@ function selection_value(){1+(a?1:2);}
     assert.equal(result.status,0,result.stderr);
     const report=JSON.parse(result.stdout);
     const expected={chain:2,returned_closure:0,trailing_item:0,constant:2,computed:0,labeled:0,standalone:0,switch_blocks:1,class_value:0,selection_value:1};
-    assert.deepEqual(report.summary,{files:2,functions_found:10,functions_presented:10,function_discovery_complete:true,has_errors:false});
+    const {call_graph: graph, ...summary}=report.summary;
+    assert.deepEqual(summary,{files:2,functions_found:10,functions_presented:10,function_discovery_complete:true,has_errors:false});
+    assert.equal(graph.scope,'project_files');
     for(const fn of report.functions) assert.equal(fn.metrics.cognitive_complexity,expected[fn.name],fn.name);
     const written=run(...args,'--output','report.json');
     assert.equal(written.status,0,written.stderr);

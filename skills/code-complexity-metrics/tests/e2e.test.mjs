@@ -30,6 +30,15 @@ test('pinned clone: deterministic output, manual examples, output file and uncha
  const clamp=report.functions.find(f=>f.name==='clamp');
  assert.deepEqual(clamp.halstead_counts,{n1:5,n2:7,eta1:3,eta2:4});
  assert.equal(clamp.metrics.halstead_volume,12*Math.log2(7));
+ // The local setAttributes call resolves. The DOM method remains unresolved.
+ const svg=report.functions.find(f=>f.name==='svgElement');
+ const setAttributes=report.functions.find(f=>f.name==='setAttributes');
+ assert.equal(svg.metrics.fan_out,1);
+ assert.equal(svg.call_graph.fan_out.complete,false);
+ assert.equal(svg.call_graph.fan_out.unresolved_calls,1);
+ // Callers in the rest of the checkout count even though only three files appear in the report.
+ assert.equal(setAttributes.metrics.fan_in,22);
+ assert.equal(report.summary.call_graph.scope,'project_files');
  const temp=await mkdtemp(path.join(os.tmpdir(),'metrics-e2e-'));
  try {
   const dest=path.join(temp,'report.json');const result=run(...args,'--format','json','--output',dest);

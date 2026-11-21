@@ -78,7 +78,7 @@ for (const [label, source, expectedName, fragment] of cases) {
       }
       const report = JSON.parse(json.stdout), filtered = JSON.parse(selected.stdout);
       assert.equal(report.functions.length, 1);
-      assert.deepEqual(Object.keys(report.functions[0]), ['name', 'location', 'metrics', 'halstead_counts', 'error']);
+      assert.deepEqual(Object.keys(report.functions[0]), ['name', 'location', 'metrics', 'halstead_counts', 'call_graph', 'error']);
       assert.equal(report.functions[0].location, `input.js:1:${start + 1}:${fragment.length}`);
       assert.equal(report.functions[0].name, expectedName);
       assert.equal(report.functions[0].metrics.cognitive_complexity, 0);

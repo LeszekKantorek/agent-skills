@@ -1,6 +1,6 @@
 # JavaScript metric rules
 
-Rules version: **2.1**.
+Rules version: **2.2**.
 
 The [generic metric rules](generic-metric-rules.md) define shared scoring, ownership, and table notation. This document specifies JavaScript syntax mappings and exceptions.
 
@@ -89,3 +89,9 @@ Use the [shared Halstead rules](generic-metric-rules.md#halstead-volume) and cla
 | Templates | A template without substitutions is one operand. An interpolated template contributes one `template_literal` operator, one operand for each nonempty text chunk between substitutions, and the ordinary contributions of each substitution expression. Keep escape spellings in their containing chunk. |
 
 For `const total = price + 2; return send(total);`, the five operators are `const`, `=`, `+`, `return`, and `call`. The five operands contain four distinct keys because `total` appears twice. The resulting Volume is `10 × log₂(9)`, about 31.70.
+
+## Call graph
+
+Use the [shared call graph rules](generic-metric-rules.md#call-graph). The analyzer follows local, statically bound functions and direct closure calls. It uses lexical scope and respects shadowing by parameters and declarations. It follows relative ESM imports, including aliases, namespace imports, and explicit re-exports, within the analyzed projects.
+
+Calls through mutable bindings, arbitrary object properties, or callbacks remain unresolved when the target cannot be established. The graph also reports imports that point outside the analyzed files.

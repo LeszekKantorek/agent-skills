@@ -1,6 +1,6 @@
 # Rust metric rules
 
-Rules version: **2.1**.
+Rules version: **2.2**.
 
 The [generic metric rules](generic-metric-rules.md) define Cognitive scoring and function ownership. Apply the [recursive composition rules](generic-metric-rules.md#recursive-composition) at every nesting level.
 
@@ -76,3 +76,9 @@ Use the [shared Halstead rules](generic-metric-rules.md#halstead-volume) and cla
 | Macros and attributes | Count recognized written macro arguments using their recovered roles and source ranges. The macro name and invocation delimiters add no occurrences. Skip macro definition templates and attributes. Unsupported argument syntax retains its diagnostic. |
 
 Both operations in `obj.run()` contribute, because the expression accesses a field and invokes it. The operands are `obj` and `run`. The parentheses add no separate operation.
+
+## Call graph
+
+Use the [shared call graph rules](generic-metric-rules.md#call-graph). The analyzer indexes statically bound functions and closures, inline modules, and file modules reached from conventional crate roots in the analyzed projects. It recognizes `crate::`, `self::`, `super::`, explicit imports, and aliases. Explicit qualified paths can resolve to inherent methods when the declaration is unique.
+
+Trait dispatch, type-dependent calls, and ambiguous imports remain unresolved. A macro invocation adds no edge of its own. Recognized calls inside recovered macro arguments keep their original source locations.

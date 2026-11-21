@@ -2,9 +2,12 @@ import { readFile, open, stat, lstat, realpath, readlink, rename, unlink } from 
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { inputFiles, languageFor } from './input-files.mjs';
+import { projectFilesForReports } from './project-files.mjs';
 import { parse } from './parser.mjs';
+import { outerId } from './analyzers/contracts.mjs';
 import { analyzerFor } from './analyzers/registry.mjs';
 import { aggregate } from './aggregation.mjs';
+import { buildCallGraph } from './call-graph.mjs';
 import { makeReport, markdown, csv, diagnosticText, globalDiagnosticText } from './public-report.mjs';
 
 function argumentsOf(args) {
@@ -120,48 +123,106 @@ async function writeSafely(target, files, content) {
   }
 }
 
+async function analyzeFile(file, reportScores) {
+  const fileId = path.resolve(file);
+  const language = languageFor(file);
+  if (!language) {
+    try {
+      const info = await stat(file);
+      if (!info.isFile()) throw Error('Input is not a regular file');
+      return { fileId, source: null, analysis: null, diagnostics: [diagnostic('UNSUPPORTED_LANGUAGE', 'unsupported', 'Unsupported language', fileId)] };
+    } catch (error) {
+      return { fileId, source: null, analysis: null, diagnostics: [diagnostic('READ_ERROR', 'input', error.message, fileId)] };
+    }
+  }
+  let source, parsed;
+  try {
+    source = await readFile(file, 'utf8');
+    parsed = await parse(source, language);
+    const analyzer = analyzerFor(language);
+    const analysis = reportScores ? analyzer.analyze(parsed.tree, source, fileId)
+      : analyzer.prepare(parsed.tree, source, fileId);
+    return { fileId, source: { fileId, source }, analysis, diagnostics: [] };
+  } catch (error) {
+    return { fileId, source: source === undefined ? null : { fileId, source }, analysis: null,
+      diagnostics: [diagnostic(source === undefined ? 'READ_ERROR' : 'ANALYSIS_ERROR', source === undefined ? 'input' : 'internal', error.message, fileId)] };
+  } finally { parsed?.dispose(); }
+}
+
+async function attachProjectGraph(reportAggregate, reportResults, reportFiles, cwd) {
+  const {projects, physicalPaths} = await projectFilesForReports(reportFiles, cwd);
+  const reportsByFile = new Map(reportResults.map(result => [result.fileId, result]));
+  const reportsByPath = new Map(reportResults.map(result => [normalized(result.fileId), result]));
+  const filesByPath = new Map(), graphById = new Map(), reportGraphFiles = new Map();
+  const projectFiles = [], reasons = new Set();
+  let unresolvedCalls = 0;
+  for (const {files, errors} of projects) {
+    const projectResults = [];
+    for (const file of files) {
+      const result = reportsByPath.get(normalized(file)) ?? await analyzeFile(file, false);
+      projectResults.push(result);
+      filesByPath.set(normalized(file), result);
+      projectFiles.push(file);
+    }
+    const graphDiagnostics = errors.map(({file, error}) =>
+      diagnostic('PROJECT_SCAN_ERROR', 'input', `${file}: ${error.message}`));
+    const project = aggregate(projectResults, graphDiagnostics);
+    buildCallGraph(project, projectResults);
+    for (const record of project.functions) graphById.set(record.id, record.callGraph);
+    unresolvedCalls += project.callGraph.unresolved_calls;
+    for (const reason of project.callGraph.reasons) reasons.add(reason);
+  }
+  for (const {fileId} of reportAggregate.functions) {
+    if (reportGraphFiles.has(fileId)) continue;
+    const physical = physicalPaths.get(fileId);
+    const canonical = physical && filesByPath.get(normalized(physical));
+    const result = reportsByFile.get(fileId);
+    if (canonical && languageFor(canonical.fileId) === languageFor(fileId)
+        && canonical.source?.source === result.source.source && canonical.analysis) {
+      reportGraphFiles.set(fileId, canonical.fileId);
+    } else {
+      // An explicitly reported source outside the scan can resolve its own calls.
+      const standalone = aggregate([result]);
+      buildCallGraph(standalone, [result]);
+      for (const record of standalone.functions) graphById.set(record.id, record.callGraph);
+      reportGraphFiles.set(fileId, fileId);
+    }
+  }
+  for (const record of reportAggregate.functions) {
+    const graphFile = reportGraphFiles.get(record.fileId);
+    const [, ordinal] = JSON.parse(record.id);
+    record.callGraph = graphById.get(outerId(graphFile, ordinal));
+  }
+  reportAggregate.callGraph = {scope: 'project_files', complete: reasons.size === 0,
+    unresolved_calls: unresolvedCalls, reasons: [...reasons].sort()};
+  return projectFiles;
+}
+
 async function main() {
   const options = argumentsOf(process.argv.slice(2));
+  const cwd = process.cwd();
   const inputErrors = [];
-  const files = await inputFiles(options.paths, process.cwd(), inputErrors);
+  const files = await inputFiles(options.paths, cwd, inputErrors);
   const results = [];
-  for (const file of files) {
-    const fileId = path.resolve(file);
-    const language = languageFor(file);
-    if (!language) {
-      try {
-        const info = await stat(file);
-        if (!info.isFile()) throw Error('Input is not a regular file');
-        results.push({ fileId, source: null, analysis: null, diagnostics: [diagnostic('UNSUPPORTED_LANGUAGE', 'unsupported', 'Unsupported language', fileId)] });
-      } catch (error) {
-        results.push({ fileId, source: null, analysis: null, diagnostics: [diagnostic('READ_ERROR', 'input', error.message, fileId)] });
-      }
-      continue;
-    }
-    let source, parsed;
-    try {
-      source = await readFile(file, 'utf8');
-      parsed = await parse(source, language);
-      const analysis = analyzerFor(language).analyze(parsed.tree, source, fileId);
-      results.push({ fileId, source: { fileId, source }, analysis, diagnostics: [] });
-    } catch (error) {
-      results.push({ fileId, source: source === undefined ? null : { fileId, source }, analysis: null,
-        diagnostics: [diagnostic(source === undefined ? 'READ_ERROR' : 'ANALYSIS_ERROR', source === undefined ? 'input' : 'internal', error.message, fileId)] });
-    } finally { parsed?.dispose(); }
-  }
+  for (const file of files) results.push(await analyzeFile(file, true));
   const globals = inputErrors.map(error => diagnostic('INPUT_GLOB_ERROR', 'input', `${error.file}: ${error.message}`));
   const aggregateResult = aggregate(results, globals);
+  const hasInputFailure = aggregateResult.diagnostics.some(d => d.category === 'input' || d.category === 'internal');
+  const usableInput = aggregateResult.files.some(file => file.analyzed ||
+    aggregateResult.diagnostics.some(d => d.fileId === file.fileId && d.code === 'UNSUPPORTED_LANGUAGE'));
+  const canPublish = !hasInputFailure || usableInput;
+  const projectFiles = canPublish ? await attachProjectGraph(aggregateResult, results, files, cwd) : [];
   const { report, selected } = makeReport(aggregateResult, options.filter);
   const globalErrors = aggregateResult.diagnostics.filter(d => d.fileId === null).map(globalDiagnosticText);
   const messages = [diagnosticText(report), ...globalErrors].filter(Boolean).join('\n');
   if (messages) process.stderr.write(messages + '\n');
-  if (aggregateResult.diagnostics.some(d => d.category === 'input' || d.category === 'internal') && !aggregateResult.files.some(file => file.analyzed || aggregateResult.diagnostics.some(d => d.fileId === file.fileId && d.code === 'UNSUPPORTED_LANGUAGE'))) {
+  if (!canPublish) {
     process.exitCode = 1;
     return;
   }
   const output = options.explain || options.format === 'markdown' ? markdown(report, selected, aggregateResult, options.explain)
     : options.format === 'csv' ? csv(report) : JSON.stringify(report, null, 2) + '\n';
-  if (options.output !== undefined) await writeSafely(options.output, files, output);
+  if (options.output !== undefined) await writeSafely(options.output, [...new Set([...files, ...projectFiles])], output);
   else process.stdout.write(output);
   if (report.summary.has_errors) process.exitCode = 1;
 }
