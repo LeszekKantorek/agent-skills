@@ -6,15 +6,15 @@
  *
  * @typedef {{row: number, column: number}} Position
  * @typedef {{startIndex: number, endIndex: number, startPosition: Position, endPosition: Position}} Range
- * @typedef {{cognitive: number, cyclomatic: number, statements: number}} Score
+ * @typedef {{cognitive: number}} Score
  * @typedef {{type: string, field: string|null, isNamed: boolean, startPosition: Position, endPosition: Position, startIndex: number, endIndex: number, children: AnalyzeNode[], score: Score}} AnalyzeNode
  * @typedef {string} OuterId
  * @typedef {{id: OuterId, name: string|null, root: AnalyzeNode}} ReportedFunction
- * @typedef {{code: string, category: 'input'|'parse'|'unsupported'|'internal', message: string, fileId: string, range: Range|null, owner: OuterId|null, affectedMetrics: Array<'cognitive'|'cyclomatic'|'statements'>, affectsFunctionDiscovery: boolean}} Diagnostic
+ * @typedef {{code: string, category: 'input'|'parse'|'unsupported'|'internal', message: string, fileId: string, range: Range|null, owner: OuterId|null, affectedMetrics: Array<'cognitive'>, affectsFunctionDiscovery: boolean}} Diagnostic
  * @typedef {{comments: Range[], unsafeCommentRanges: Range[], lineAnnotations: Array<{row: number, contentEndIndex: number, endIndex: number|null}>}} Presentation
  * @typedef {{fileId: string, source: string}} SourceFile
  * @typedef {{fileId: string, source: SourceFile|null, analysis: Prepared|null, diagnostics: Diagnostic[]}} FileResult
- * @typedef {{code: string, category: 'input'|'internal', message: string, fileId: null, range: null, owner: null, affectedMetrics: Array<'cognitive'|'cyclomatic'|'statements'>, affectsFunctionDiscovery: boolean}} RunError
+ * @typedef {{code: string, category: 'input'|'internal', message: string, fileId: null, range: null, owner: null, affectedMetrics: Array<'cognitive'>, affectsFunctionDiscovery: boolean}} RunError
  * @typedef {{tree: AnalyzeNode, functions: ReportedFunction[], ownerByNode: Map<AnalyzeNode, OuterId|null>, diagnostics: Diagnostic[], presentation: Presentation}} Prepared
  * @typedef {{prepare(parsedTree: object, source: string, fileId: string): Prepared, analyze(parsedTree: object, source: string, fileId: string): Prepared}} LanguageAnalyzer
  *
@@ -45,5 +45,5 @@ export function outerId(fileId, ordinal) {
 
 /** Create a node with independent positions, children and local zero score. */
 export function createAnalyzeNode({type, field = null, isNamed, startPosition, endPosition, startIndex, endIndex, children = []}) {
-  return {type, field, isNamed, startPosition: {...startPosition}, endPosition: {...endPosition}, startIndex, endIndex, children: [...children], score: {cognitive: 0, cyclomatic: 0, statements: 0}};
+  return {type, field, isNamed, startPosition: {...startPosition}, endPosition: {...endPosition}, startIndex, endIndex, children: [...children], score: {cognitive: 0}};
 }

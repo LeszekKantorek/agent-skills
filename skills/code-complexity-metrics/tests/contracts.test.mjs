@@ -15,10 +15,10 @@ test('contract: nodes own positions, ordered children and independent local scor
   assert.deepEqual(parent.startPosition, {row: 1, column: 2});
   assert.deepEqual(parent.endPosition, {row: 1, column: 5});
   assert.equal(parent.children[0], first); assert.equal(parent.children[1], second);
-  assert.deepEqual(parent.score, {cognitive: 0, cyclomatic: 0, statements: 0});
-  Object.assign(first.score, {cognitive: 1, cyclomatic: 2, statements: 3});
-  assert.deepEqual(parent.score, {cognitive: 0, cyclomatic: 0, statements: 0});
-  assert.deepEqual(second.score, {cognitive: 0, cyclomatic: 0, statements: 0});
+  assert.deepEqual(parent.score, {cognitive: 0});
+  Object.assign(first.score, {cognitive: 1});
+  assert.deepEqual(parent.score, {cognitive: 0});
+  assert.deepEqual(second.score, {cognitive: 0});
   assert.deepEqual(Object.keys(parent).sort(), ['children','endIndex','endPosition','field','isNamed','score','startIndex','startPosition','type'].sort());
   assert.equal(first.field, 'name'); assert.equal(second.isNamed, false);
 });

@@ -1,5 +1,7 @@
 # Name AST conditions and search predicates
 
+This case uses metrics reported by analyzer version 1.x.
+
 In the AST preparation code, we named boolean conditions by what they check. For example, the JavaScript analyzer uses `isCommentNode` to identify nodes whose source ranges belong in the comment list.
 
 ```js

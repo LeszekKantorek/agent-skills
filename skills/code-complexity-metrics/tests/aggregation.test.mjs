@@ -5,19 +5,19 @@ import {makeReport, markdown} from '../scripts/public-report.mjs';
 import {createAnalyzeNode as node, outerId} from '../scripts/analyzers/contracts.mjs';
 import {parse} from '../scripts/parser.mjs';
 import {analyzerFor} from '../scripts/analyzers/registry.mjs';
-const score=(c=0,y=0,s=0)=>({cognitive:c,cyclomatic:y,statements:s});
+const score=(cognitive=0)=>({cognitive});
 function n(row, points=score(), children=[]) {const v=node({type:'anything',isNamed:true,startPosition:{row,column:0},endPosition:{row,column:1},startIndex:row*2,endIndex:row*2+1,children});v.score=points;return v;}
 const diagnostic=(fileId,owner,affectedMetrics=[],affectsFunctionDiscovery=false)=>({code:'X',category:'unsupported',message:'x',fileId,range:fileId===null?null:{startIndex:0,endIndex:1,startPosition:{row:0,column:0},endPosition:{row:0,column:1}},owner,affectedMetrics,affectsFunctionDiscovery});
 function manual(fileId='a') {
  const a=outerId(fileId,0),b=outerId(fileId,1),c=outerId(fileId,2);
- const cross=n(2,score(0,0,2)), rootA=n(0,score(0,1,0),[cross]), outside=n(2,score(1,0,3)), container=n(1,score(),[outside]), rootB=n(3), rootC=n(4), tree=n(0,score(),[rootA,container,rootB,rootC]);
+ const cross=n(2,score(2)), rootA=n(0,score(1),[cross]), outside=n(2,score(4)), container=n(1,score(),[outside]), rootB=n(3), rootC=n(4), tree=n(0,score(),[rootA,container,rootB,rootC]);
  const ownerByNode=new Map([[tree,null],[rootA,a],[cross,b],[container,null],[outside,a],[rootB,b],[rootC,c]]);
  return {fileId,source:{fileId,source:'x\nx\nx\nx\nx\nx'},diagnostics:[],analysis:{tree,functions:[{id:a,name:'same',root:rootA},{id:b,name:'same',root:rootB},{id:c,name:'free',root:rootC}],ownerByNode,diagnostics:[],presentation:{comments:[],unsafeCommentRanges:[],lineAnnotations:Array.from({length:6},(_,row)=>({row,contentEndIndex:row*2+1,endIndex:row*2+1}))}}};
 }
 test('ownership, row sums, partial metrics and discovery are independent',()=>{
- const f=manual(), [a,b,c]=f.analysis.functions.map(x=>x.id), d=diagnostic(f.fileId,a,['cognitive']), e=diagnostic(f.fileId,b,['statements']), x=diagnostic(f.fileId,null,[],true);
+ const f=manual(), [a,b,c]=f.analysis.functions.map(x=>x.id), d=diagnostic(f.fileId,a,['cognitive']), e=diagnostic(f.fileId,b,['cognitive']), x=diagnostic(f.fileId,null,[],true);
  f.diagnostics=[d];f.analysis.diagnostics=[d,e,x]; const r=aggregate([f,manual('b')]);
- assert.equal(r.functions.length,6); assert.deepEqual(r.functions[0].knownScore,score(1,1,3));assert.deepEqual(r.functions[0].metrics,score(1,0,3));assert.deepEqual(r.functions[0].byRow.get(3),score(1,0,3));assert.deepEqual(r.functions[1].knownScore,score(0,0,2)); assert.equal(r.functions[1].metrics.statements,2); assert.deepEqual(r.functions[2].metrics,score());assert.equal(r.diagnostics.length,3);assert.equal(r.files[0].functionDiscoveryComplete,false);assert.equal(r.files[1].functionDiscoveryComplete,true);assert.equal(r.functionDiscoveryComplete,false); assert.equal(r.sources.get('a'),f.source);assert.equal(r.presentation.get('a'),f.analysis.presentation);assert.notEqual(a,b);assert.notEqual(b,c);
+ assert.equal(r.functions.length,6); assert.deepEqual(r.functions[0].knownScore,score(5));assert.deepEqual(r.functions[0].metrics,score(4));assert.deepEqual(r.functions[0].byRow.get(3),score(4));assert.deepEqual(r.functions[1].knownScore,score(2)); assert.deepEqual(r.functions[1].metrics,score(2)); assert.deepEqual(r.functions[2].metrics,score());assert.equal(r.diagnostics.length,3);assert.equal(r.files[0].functionDiscoveryComplete,false);assert.equal(r.files[1].functionDiscoveryComplete,true);assert.equal(r.functionDiscoveryComplete,false); assert.equal(r.sources.get('a'),f.source);assert.equal(r.presentation.get('a'),f.analysis.presentation);assert.notEqual(a,b);assert.notEqual(b,c);
 });
 test('invalid tree rejects the whole file, other files survive',()=>{
  for(const mutate of [f=>f.analysis.ownerByNode.delete(f.analysis.tree),f=>f.analysis.ownerByNode.set(f.analysis.tree,'missing'),f=>f.analysis.tree.children.push(f.analysis.tree),f=>f.analysis.ownerByNode.set({},null),f=>f.analysis.functions[0].root=f.analysis.tree]) {
@@ -30,16 +30,27 @@ test('failed file, owner-null diagnostics and global discovery',()=>{
 });
 async function actual(source,lang,id) {const p=await parse(source,lang);let analysis;try{analysis=analyzerFor(lang).analyze(p.tree,source,id)}finally{p.dispose()}return {fileId:id,source:{fileId:id,source},analysis,diagnostics:[]};}
 const all=n=>[n,...n.children.flatMap(all)];
-test('multiline calls preserve local score, original rows and sums after disposal',async()=>{
- for(const [lang,source,expected] of [['javascript','function f() {\n  make()\n    .first()\n    .second();\n}',[[1,score(0,1,0)],[2,score(0,0,3)]]],['rust','fn f() {\n    assert_eq!(\n        make()\n            .first()\n            .second(),\n        expected\n    );\n}',[[1,score(0,1,0)],[2,score(0,0,1)],[3,score(0,0,3)]]]]) {
-  const f=await actual(source,lang,lang), nodes=all(f.analysis.tree), calls=nodes.filter(n=>n.type==='call_expression');assert.equal(calls.length,3);assert.deepEqual(calls.map(n=>[n.startPosition.row,n.score.statements]),Array(3).fill([lang==='rust'?2:1,1]));
-  const r=aggregate([f]), fn=r.functions[0];assert.deepEqual([...fn.byRow],expected);assert.deepEqual(fn.metrics,score(0,1,lang==='rust'?4:3));for(const k of Object.keys(score())) assert.equal([...fn.byRow.values()].reduce((v,s)=>v+s[k],0),fn.metrics[k]);
+test('multiline calls and Cognitive contributions retain source rows after disposal',async()=>{
+ for(const [lang,source,callRow,decisionRow] of [
+  ['javascript','function f() {\n  make()\n    .first()\n    .second();\n  if (ready) {}\n}',1,5],
+  ['rust','fn f() {\n    assert_eq!(\n        make()\n            .first()\n            .second(),\n        expected\n    );\n    if ready {}\n}',2,8],
+ ]) {
+  const f=await actual(source,lang,lang), nodes=all(f.analysis.tree), calls=nodes.filter(n=>n.type==='call_expression');
+  assert.equal(calls.length,3);
+  for (const call of calls) {
+   assert.equal(call.startPosition.row,callRow);
+   assert.equal(call.score.cognitive,0);
+   assert.equal(f.analysis.ownerByNode.get(call),f.analysis.functions[0].id);
+  }
+  const fn=aggregate([f]).functions[0];
+  assert.deepEqual([...fn.byRow],[[decisionRow,score(1)]]);
+  assert.deepEqual(fn.metrics,score(1));
  }
 });
 test('module and function DSL diagnostics do not poison independent function',async()=>{
- for(const source of ['unknown! { fn hidden() {} => custom } fn good(){a();}','fn bad(){unknown!(a; => b);} fn good(){a();}']) {
-  const f=await actual(source,'rust','dsl'), r=aggregate([f]);const good=r.functions.find(x=>x.name==='good');assert.deepEqual(good.metrics,score(0,0,0));assert.ok(r.diagnostics.length);assert.ok(!r.functions.some(x=>x.name==='hidden'));
-  if(source.startsWith('unknown')) assert.equal(r.functionDiscoveryComplete,false);else {const bad=r.functions.find(x=>x.name==='bad');assert.deepEqual(bad.metrics,score());assert.ok(bad.knownScore.statements>=1);}
+ for(const source of ['unknown! { fn hidden() {} => custom }\nfn good(){if ready {}}','fn bad(){if ready {} unknown!(a; => b);}\nfn good(){if ready {}}']) {
+  const f=await actual(source,'rust','dsl'), r=aggregate([f]);const good=r.functions.find(x=>x.name==='good');assert.deepEqual(good.metrics,score(1));assert.ok(r.diagnostics.length);assert.ok(!r.functions.some(x=>x.name==='hidden'));
+  if(source.startsWith('unknown')) assert.equal(r.functionDiscoveryComplete,false);else {const bad=r.functions.find(x=>x.name==='bad');assert.deepEqual(bad.metrics,score());assert.deepEqual(bad.knownScore,score(1));}
  }
 });
 
@@ -50,14 +61,14 @@ test('module and function DSL diagnostics do not poison independent function',as
 test('unlocated owner errors select deterministically without masking rows',()=>{
  const f=manual(), owner=f.analysis.functions[0].id;
  f.diagnostics=[{...diagnostic(f.fileId,owner),category:'internal',range:null,code:'Z'}, {...diagnostic(f.fileId,owner),category:'input',range:null,code:'A'}];
- const r=aggregate([f]);assert.equal(r.functions[0].error.code,'A');assert.deepEqual(r.functions[0].metrics,score(1,1,3));
+ const r=aggregate([f]);assert.equal(r.functions[0].error.code,'A');assert.deepEqual(r.functions[0].metrics,score(5));
 });
 
 test('half-open multiline and empty diagnostic ranges mask their physical rows',()=>{
  const f=manual(), owner=f.analysis.functions[0].id;
  const d={...diagnostic(f.fileId,owner),range:{startIndex:0,endIndex:4,startPosition:{row:0,column:0},endPosition:{row:2,column:0}}};
- f.analysis.diagnostics=[d];let r=aggregate([f]);assert.deepEqual(r.functions[0].metrics,score(1,0,3));assert.equal(r.functions[0].errorRows.has(3),false);
- d.range={startIndex:4,endIndex:4,startPosition:{row:2,column:0},endPosition:{row:2,column:0}};r=aggregate([f]);assert.deepEqual(r.functions[0].metrics,score(0,1,0));assert.equal(r.functions[0].errorRows.has(3),true);
+ f.analysis.diagnostics=[d];let r=aggregate([f]);assert.deepEqual(r.functions[0].metrics,score(4));assert.equal(r.functions[0].errorRows.has(3),false);
+ d.range={startIndex:4,endIndex:4,startPosition:{row:2,column:0},endPosition:{row:2,column:0}};r=aggregate([f]);assert.deepEqual(r.functions[0].metrics,score(1));assert.equal(r.functions[0].errorRows.has(3),true);
 });
 
 test('multiple errors retain source order and unsafe annotations leave code intact',()=>{
@@ -65,6 +76,6 @@ test('multiple errors retain source order and unsafe annotations leave code inta
  const d=(row,code)=>({...diagnostic(f.fileId,owner),code,range:{startIndex:row*2,endIndex:row*2+1,startPosition:{row,column:0},endPosition:{row,column:1}}});
  f.analysis.diagnostics=[d(2,'B'),d(0,'A')];f.analysis.presentation.lineAnnotations[2].endIndex=null;
  const a=aggregate([f]), record=a.functions[0];assert.equal(record.error.code,'A');assert.equal(a.diagnostics.length,2);
- const {report,selected}=makeReport(a);const text=markdown(report,selected,a,true);assert.match(text,/Wiersz 3: Cognitive: 0; Cyclomatic: 0; Statements: 0 \/\/ error: B: x/);
- assert.match(text,/x \/\/ Cognitive: 0; Cyclomatic: 0; Statements: 0 \/\/ error: A: x/);
+ const {report,selected}=makeReport(a);const text=markdown(report,selected,a,true);assert.match(text,/Wiersz 3: Cognitive: 0 \/\/ error: B: x/);
+ assert.match(text,/x \/\/ Cognitive: 0 \/\/ error: A: x/);
 });

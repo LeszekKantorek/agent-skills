@@ -28,7 +28,6 @@ const supported = new Set([
   'shorthand_property_identifier_pattern', 'statement_identifier',
 ]);
 const functions = new Set(['function_expression','function_declaration','generator_function','generator_function_declaration','arrow_function','method_definition']);
-const metrics = ['cognitive', 'cyclomatic', 'statements'];
 const annotationSensitiveTypes = new Set([
   'string', 'template_string', 'regex', 'comment', 'html_comment',
   'jsx_text', 'jsx_element', 'jsx_self_closing_element',
@@ -140,7 +139,7 @@ function buildDiagnostics(issues, ownerByNode, fileId, range) {
     // that region. A sibling outside it does not inherit the diagnostic.
     function collectOwners(n) { owners.add(ownerByNode.get(n)); for (const c of n.children) collectOwners(c); }
     collectOwners(node);
-    for (const owner of owners) diagnostics.push({code,category,message,fileId,range:range(node.startIndex,node.endIndex),owner,affectedMetrics:[...metrics],affectsFunctionDiscovery:owner === null || (category === 'unsupported' ? !complete : !local)});
+    for (const owner of owners) diagnostics.push({code,category,message,fileId,range:range(node.startIndex,node.endIndex),owner,affectedMetrics:['cognitive'],affectsFunctionDiscovery:owner === null || (category === 'unsupported' ? !complete : !local)});
   }
   return diagnostics;
 }

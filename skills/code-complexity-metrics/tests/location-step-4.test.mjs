@@ -27,7 +27,7 @@ function csvCells(line) {
 function fixture(name = '  a\n\\n\r\t\x00\x7f\x85\u2028\u2029|,"`<&amp;  ') {
   const fileId = path.join(process.cwd(), 'a\n\\n\t\x01|,`&.js');
   const source = 'function x(){\r\n  return 1;\r\n}';
-  const record = { id: 'id', fileId, name, rootRange: { startIndex: 0, endIndex: source.length, startPosition: { row: 0, column: 0 }, endPosition: { row: 2, column: 1 } }, metrics: { cognitive: 2, cyclomatic: 3, statements: 4 }, byRow: new Map([[2, { cognitive: 2, cyclomatic: 3, statements: 4 }]]) };
+  const record = { id: 'id', fileId, name, rootRange: { startIndex: 0, endIndex: source.length, startPosition: { row: 0, column: 0 }, endPosition: { row: 2, column: 1 } }, metrics: { cognitive: 2 }, byRow: new Map([[2, { cognitive: 2 }]]) };
   return { functions: [record], files: [{ fileId, analyzed: true, functionDiscoveryComplete: true }], diagnostics: [{ owner: 'id', fileId, code: 'E\n\\n', message: '"|`<&\t\x01', category: 'parse' }], sources: new Map([[fileId, { source }]]), presentation: new Map([[fileId, { comments: [], lineAnnotations: [{ contentEndIndex: 13, endIndex: 13 }, { contentEndIndex: 26, endIndex: 26 }, { contentEndIndex: source.length, endIndex: source.length }] }]]), hasErrors: true, functionDiscoveryComplete: true };
 }
 test('all representations consume the same once-normalized values', () => {
@@ -36,7 +36,7 @@ test('all representations consume the same once-normalized values', () => {
   const json = JSON.parse(JSON.stringify(prepared.report));
   const expectedName = String.raw`  a\n\\n\r\t\u0000\u007F\u0085\u2028\u2029|,"` + '`<&amp;  ';
   assert.equal(json.functions[0].name, expectedName);
-  assert.deepEqual(json.functions[0].metrics, { cognitive_complexity: 2, cyclomatic_complexity: 3, statement_count: 4 });
+  assert.deepEqual(json.functions[0].metrics, { cognitive_complexity: 2 });
   assert.equal(json.diagnostics[0].error, String.raw`E\n\\n: "|` + '`<&' + String.raw`\t\u0001`);
   assert.equal(json.diagnostics[0].name, expectedName);
   assert.equal(json.files[0].fileId, aggregate.files[0].fileId.replaceAll('\\', '\\\\').replaceAll('\n', String.raw`\n`).replaceAll('\t', String.raw`\t`).replaceAll('\x01', String.raw`\u0001`));
@@ -49,7 +49,7 @@ test('all representations consume the same once-normalized values', () => {
   const header = explain.split('\n').find(line => line.startsWith('## '));
   const [name, location] = header.slice(3).split(' — ');
   assert.deepEqual(mdCells(`| ${name} | ${location} |`).slice(0, 2), [expectedName, json.functions[0].location]);
-  assert.ok(explain.includes('function x(){ // Cognitive: 0; Cyclomatic: 0; Statements: 0\r\n  return 1; // Cognitive: +2; Cyclomatic: +3; Statements: +4\r\n}'));
+  assert.ok(explain.includes('function x(){ // Cognitive: 0\r\n  return 1; // Cognitive: +2\r\n}'));
   assert.equal(diagnosticText(prepared.report), `${json.diagnostics[0].location}: ${json.diagnostics[0].error} (${expectedName})`);
   assert.equal(markdown(prepared.report, prepared.selected, aggregate), md);
   assert.equal(csv(prepared.report).split('\n')[4], csvLine);

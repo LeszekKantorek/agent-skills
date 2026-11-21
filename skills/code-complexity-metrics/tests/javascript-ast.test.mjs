@@ -13,7 +13,7 @@ test('step 4: independent tree, UTF-16, ordered tokens and complete ownership af
   const s='// 😀\r\n\tfunction f(){ a && b || c ?? d; x += 1; x++; }';
   const p=await get(s), nodes=all(p.tree);
   assert.equal(p.ownerByNode.size,nodes.length); assert.equal(new Set(nodes).size,nodes.length);
-  for(const n of nodes) { assert.deepEqual(n.score,{cognitive:0,cyclomatic:0,statements:0}); assert.ok(p.ownerByNode.has(n)); assert.ok(p.ownerByNode.get(n)===null || p.functions.some(f=>f.id===p.ownerByNode.get(n))); }
+  for(const n of nodes) { assert.deepEqual(n.score,{cognitive:0}); assert.ok(p.ownerByNode.has(n)); assert.ok(p.ownerByNode.get(n)===null || p.functions.some(f=>f.id===p.ownerByNode.get(n))); }
   const f=p.functions[0]; assert.equal(f.name,'f'); assert.equal(p.ownerByNode.get(f.root),f.id);
   for(const t of ['&&','||','??','+=','++']) { const n=find(p.tree,t)[0]; assert.ok(n,t); assert.equal(slice(s,n),t); assert.equal(n.isNamed,false); assert.equal(n.field,'operator'); assert.deepEqual(n.startPosition,{row:1,column:n.startIndex-s.indexOf('\n')-1}); assert.equal(n.endIndex-n.startIndex,t.length); }
   assert.equal(f.root.startIndex,8); assert.deepEqual(f.root.startPosition,{row:1,column:1}); assert.equal(slice(s,f.root),'function f(){ a && b || c ?? d; x += 1; x++; }');
@@ -50,7 +50,12 @@ test('step 4: pinned supported syntax and diagnostics for unsupported or invalid
  const s='function f({[key()]: x = init()}) { obj?.method?.(); import("x"); tag`a ${call()}`; await work(); } class C extends B { constructor(){super();} field = init(); }';
  const p=await get(s); assert.deepEqual(p.diagnostics,[]); for(const type of ['optional_chain','import','super','template_substitution','await_expression','computed_property_name','assignment_pattern','field_definition']) assert.ok(find(p.tree,type).length,type);
  const yielding=await get('function* f(){ yield value; }'); assert.deepEqual(yielding.diagnostics,[]);
- const bad=await get('function f(){ return <Widget value={call()}/>; } function good(){}'); assert.ok(bad.diagnostics.some(d=>d.category==='unsupported' && d.owner===bad.functions[0].id && !d.affectsFunctionDiscovery && d.affectedMetrics.length===3 && d.range)); assert.equal(bad.functions[1].name,'good');
+ const bad=await get('function f(){ return <Widget value={call()}/>; } function good(){}');
+ const diagnostic=bad.diagnostics.find(d=>d.category==='unsupported' && d.owner===bad.functions[0].id);
+ assert.ok(diagnostic?.range);
+ assert.equal(diagnostic.affectsFunctionDiscovery,false);
+ assert.deepEqual(diagnostic.affectedMetrics,['cognitive']);
+ assert.equal(bad.functions[1].name,'good');
  const invalid=await get('function f(){ let x = ; } function good(){}'); assert.ok(invalid.diagnostics.some(d=>d.category==='parse' && d.affectsFunctionDiscovery && d.range));
 });
 

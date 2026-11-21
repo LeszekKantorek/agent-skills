@@ -20,15 +20,11 @@ test('pinned clone: deterministic output, manual examples, output file and uncha
  const args=targets.flatMap(f=>['--path',path.join(clone,f)]);
  const a=run(...args), b=run(...args); assert.equal(a.status,0);assert.equal(b.status,0);assert.equal(a.stdout,b.stdout);
  const report=JSON.parse(a.stdout);
- // Manual counts: clamp return+2 calls; svgElement 1 declaration+2 calls+if+assignment+return;
- // setAttributes loop+binding+2 calls; validHeading return+call+choice+2 branch values.
- // events: if at closure depth +2, else +1, nested match +3; base+if+2 arms.
- // Its 34 statements are 4 declarators, 1 async block, 1 if, 1 match,
- // 4 implicit returns, 1 explicit return, and 22 calls.
- const expected={clamp:[0,3,1],svgElement:[1,6,2],setAttributes:[1,4,2],validHeading:[2,5,4],events:[6,34,4]};
- for(const [name,values] of Object.entries(expected)) {
+ // events: if at closure depth +2, else +1, nested match +3.
+ const expected={clamp:0,svgElement:1,setAttributes:1,validHeading:2,events:6};
+ for(const [name,expectedScore] of Object.entries(expected)) {
   const m=report.functions.find(f=>f.name===name)?.metrics;
-  assert.deepEqual([m.cognitive_complexity,m.statement_count,m.cyclomatic_complexity],values,name);
+  assert.deepEqual(m,{cognitive_complexity:expectedScore},name);
  }
  const temp=await mkdtemp(path.join(os.tmpdir(),'metrics-e2e-'));
  try {
@@ -46,7 +42,7 @@ test('pinned clone glob scope covers both languages and remains deterministic',a
  const a=run(...args),b=run(...args);assert.equal(a.status,0);assert.equal(b.status,0);assert.equal(a.stdout,b.stdout);
  const report=JSON.parse(a.stdout);
  const owner=report.functions.find(f=>f.name==='native_owners_cannot_cross_threads_or_be_shared');
- assert.ok(owner); assert.equal(owner.error,null); assert.deepEqual(owner.metrics,{cognitive_complexity:0,cyclomatic_complexity:1,statement_count:5});
+ assert.ok(owner); assert.equal(owner.error,null); assert.deepEqual(owner.metrics,{cognitive_complexity:0});
  assert.ok(!report.diagnostics.some(d=>d.name==='native_owners_cannot_cross_threads_or_be_shared'));
  assert.equal(report.summary.files,68);assert.equal(paths.filter(f=>f.endsWith('.rs')).length,34);assert.equal(paths.filter(f=>f.endsWith('.js')).length,34);
  assert.equal('analyzed_files' in report,false);

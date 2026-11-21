@@ -13,9 +13,9 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
     startIndex, endIndex,
     startPosition: {row, column: 0}, endPosition: {row, column: endColumn},
   });
-  const complete = {cognitive: 1, cyclomatic: 2, statements: 3};
-  const knownPartial = {cognitive: 0, cyclomatic: 1, statements: 2};
-  const partial = {...knownPartial, statements: null};
+  const complete = {cognitive: 1};
+  const knownPartial = {cognitive: 2};
+  const partial = {cognitive: null};
   const result = {
     files: [{fileId, analyzed: true, functionDiscoveryComplete: false}],
     functions: [
@@ -27,7 +27,7 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
     diagnostics: [
       {code: 'PARTIAL', category: 'unsupported', message: 'partial', fileId, owner: id(1),
         range: range(split + 1, source.length, 1, source.length - split - 1),
-        affectedMetrics: ['statements'], affectsFunctionDiscovery: false},
+        affectedMetrics: ['cognitive'], affectsFunctionDiscovery: false},
       {code: 'GLOBAL', category: 'unsupported', message: 'discovery', fileId, owner: null,
         range: null, affectedMetrics: [], affectsFunctionDiscovery: true},
     ],
@@ -48,26 +48,26 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
   assert.equal(json.summary.functions_found, 2);
   assert.equal(json.summary.function_discovery_complete, false);
   assert.equal(json.summary.has_errors, true);
-  assert.deepEqual(json.functions.map(fn => Object.values(fn.metrics)), [[1, 2, 3], [0, 1, null]]);
+  assert.deepEqual(json.functions.map(fn => fn.metrics), [{cognitive_complexity: 1}, {cognitive_complexity: null}]);
   assert.deepEqual(json.functions.map(fn => fn.location), ['manual.js:1:1:15', 'manual.js:2:1:16']);
   assert.deepEqual(json.diagnostics.map(d => [d.error, d.name, d.location]), [['GLOBAL: discovery', null, `manual.js:0:0:${source.length}`], ['PARTIAL: partial', 'bad', 'manual.js:2:1:16']]);
 
   const table = markdown(report, selected, result);
-  assert.match(table, /\| ok \|.*\| 1 \| 2 \| 3 \|/);
-  assert.match(table, /\| bad \|.*\| 0 \| 1 \| null \(niepełna analiza\) \|/);
+  assert.match(table, /\| ok \|.*\| 1 \|/);
+  assert.match(table, /\| bad \|.*\| null \(niepełna analiza\) \|/);
   assert.match(table, /GLOBAL/);
   assert.match(table, /PARTIAL/);
   const csvOutput = csv(report);
-  assert.match(csvOutput, /^ok,.*:1:1:15,1,2,3,$/m);
-  assert.match(csvOutput, /^bad,.*:2:1:16,0,1,null,$/m);
+  assert.match(csvOutput, /^ok,.*:1:1:15,1,$/m);
+  assert.match(csvOutput, /^bad,.*:2:1:16,null,$/m);
   const diagnosticOutput = diagnosticText(report);
   assert.match(diagnosticOutput, /GLOBAL/);
   assert.match(diagnosticOutput, /PARTIAL/);
   assert.match(diagnosticOutput, /:2:1:16/);
 
   const explain = markdown(report, selected, result, true);
-  assert.ok(explain.includes('function ok(){} // Cognitive: +1; Cyclomatic: +2; Statements: +3'));
-  assert.ok(explain.includes('function bad(){} // Cognitive: 0; Cyclomatic: +1; Statements: +2 (częściowe)'));
+  assert.ok(explain.includes('function ok(){} // Cognitive: +1'));
+  assert.ok(explain.includes('function bad(){} // Cognitive: +2 (częściowe)'));
   assert.match(explain, /GLOBAL/);
   assert.match(explain, /PARTIAL/);
   for (const [filter, expectedNames] of [['ok', ['ok']], ['bad', ['bad']], ['none', []]]) {
@@ -87,8 +87,8 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
     const filteredExplain = markdown(filtered.report, filtered.selected, result, true);
     assert.match(filteredExplain, /PARTIAL/);
     if (filter === 'bad') {
-      assert.match(filteredCsv, /^bad,.*:2:1:16,0,1,null,$/m);
-      assert.ok(filteredExplain.includes('Statements: +2 (częściowe)'));
+      assert.match(filteredCsv, /^bad,.*:2:1:16,null,$/m);
+      assert.ok(filteredExplain.includes('Cognitive: +2 (częściowe)'));
     }
     assert.match(diagnosticText(filtered.report), /GLOBAL/);
   }

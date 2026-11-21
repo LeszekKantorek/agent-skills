@@ -4,7 +4,7 @@ import {parse} from '../scripts/parser.mjs';
 import {analyze} from '../scripts/analyzers/rust/analyze.mjs';
 const walk=n=>[n,...n.children.flatMap(walk)];
 async function run(source){const p=await parse(source,'rust');try{return analyze(p.tree,source,'file');}finally{p.dispose();}}
-const sum=nodes=>nodes.reduce((a,n)=>a.map((v,i)=>v+n.score[['cognitive','cyclomatic','statements'][i]]),[0,0,0]);
+const sum=nodes=>nodes.reduce((sum,n)=>sum+n.score.cognitive,0);
 // M14: .local/msfs2024-artificial-horizon/src/providers/simconnect/native.rs:870-876
 const content=`
         static CLOSE_RESULT: Cell<i32> = const { Cell::new(0) };
@@ -22,8 +22,7 @@ test('M14 full declarations in module and outer retain original locations and or
   assert.equal(walk(m).filter(n=>n.type==='call_expression').length,7);
   for(const n of items) assert.equal(p.ownerByNode.get(n),outer?p.functions[0].id:null);
   assert.deepEqual(p.functions.map(f=>f.name),outer?['f','g']:['g']);
-  // Macro + 5 declarators + 5 blocks + 7 calls + 5 block results.
-  assert.deepEqual(sum(walk(m)),[0,0,23+(outer?1:0)]);
+  assert.equal(sum(walk(m)),0);
  }
 });
 test('declaration list recurses into expressions, types and closures',async()=>{
@@ -32,7 +31,7 @@ test('declaration list recurses into expressions, types and closures',async()=>{
  assert.deepEqual(m.children.filter(n=>n.field==='declaration').map(n=>n.type),['const_item','static_item']);
  assert.equal(walk(m).find(n=>n.type==='closure_expression') && p.functions.length,1);
  for(const name of ['size()','check()','load()','other()','value()']) assert.ok(walk(m).some(n=>n.type==='call_expression' && source.slice(n.startIndex,n.endIndex)===name),name);
- assert.ok(sum(walk(m))[0]>0);
+ assert.ok(sum(walk(m))>0);
  const q=await run('m!{static C: fn() = || call();}\nfn g(){}'); assert.deepEqual(q.diagnostics,[]); assert.deepEqual(q.functions.map(f=>f.name),['C','g']);
 });
 test('incomplete, mixed, template and metavariable lists are rejected atomically',async()=>{
@@ -40,9 +39,10 @@ test('incomplete, mixed, template and metavariable lists are rejected atomically
   for(const outer of [false,true]) {const p=await run(`${outer?'fn f(){':''}m!{${content}}${outer?'}':''}\nfn g(){}`); const m=walk(p.tree).find(n=>n.type==='macro_invocation'); assert.ok(p.diagnostics.length,content); assert.equal(m.children.filter(n=>n.field==='declaration').length,0,content); assert.equal(p.diagnostics[0].affectsFunctionDiscovery,!outer,content);}
  }
 });
-test('single declaration contributes a declarator without a synthetic wrapper',async()=>{
+test('single declaration is recovered without a synthetic wrapper',async()=>{
  const p=await run('fn f(){m!{static X: T = load();};}'); assert.deepEqual(p.diagnostics,[]);
- const m=walk(p.tree).find(n=>n.type==='macro_invocation'); assert.deepEqual(sum(walk(m)),[0,0,3]);
+ const m=walk(p.tree).find(n=>n.type==='macro_invocation'); assert.equal(sum(walk(m)),0);
+ assert.deepEqual(m.children.filter(n=>n.field==='declaration').map(n=>n.type),['static_item']);
  const q=await run('m!{static X:T=nested!($value);}\nfn g(){}'); assert.equal(q.diagnostics.length,1); assert.equal(q.diagnostics[0].affectsFunctionDiscovery,true);
 });
 test('doc comments have the same list position requirements as attributes',async()=>{

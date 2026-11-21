@@ -9,11 +9,7 @@ import {parse} from '../scripts/parser.mjs';
 import {analyzerFor} from '../scripts/analyzers/registry.mjs';
 import {aggregate} from '../scripts/aggregation.mjs';
 import {cognitive as rustCognitive} from '../scripts/analyzers/rust/cognitive.mjs';
-import {cyclomatic as rustCyclomatic} from '../scripts/analyzers/rust/cyclomatic.mjs';
-import {statements as rustStatements} from '../scripts/analyzers/rust/statements.mjs';
 import {cognitive as jsCognitive} from '../scripts/analyzers/javascript/cognitive.mjs';
-import {cyclomatic as jsCyclomatic} from '../scripts/analyzers/javascript/cyclomatic.mjs';
-import {statements as jsStatements} from '../scripts/analyzers/javascript/statements.mjs';
 
 const cli = fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
 const walk = node => [node, ...node.children.flatMap(walk)];
@@ -45,8 +41,8 @@ function checkRoles(language, tree, source) {
   }
 }
 const cases = [
-  ['rust', 'f.rs', 'fn f(){assert!(ready && verify());}', [1, 2, 2]],
-  ['javascript', 'f.js', 'function f(){let x=new Foo(load());}', [0, 1, 3]],
+  ['rust', 'f.rs', 'fn f(){assert!(ready && verify());}', 1],
+  ['javascript', 'f.js', 'function f(){let x=new Foo(load());}', 0],
 ];
 
 for (const [language, file, source, expected] of cases) {
@@ -63,22 +59,12 @@ for (const [language, file, source, expected] of cases) {
         const before = walk(prepared.tree);
         assert.deepEqual(prepared.diagnostics, []);
         assert.equal(prepared.functions.length, 1);
-        assert.ok(before.every(node => Object.values(node.score).every(value => value === 0)));
+        assert.ok(before.every(node => node.score.cognitive === 0));
         checkRoles(language, prepared.tree, source);
         const shape = structure(prepared.tree);
-        const passes = language === 'rust'
-          ? [[rustCognitive, 'cognitive'], [rustCyclomatic, 'cyclomatic'], [rustStatements, 'statements']]
-          : [[jsCognitive, 'cognitive'], [jsCyclomatic, 'cyclomatic'], [jsStatements, 'statements']];
-        for (const [pass, field] of passes) {
-          const scores = before.map(node => ({...node.score}));
-          pass(prepared, source);
-          assert.equal(structure(prepared.tree), shape);
-          before.forEach((node, index) => {
-            for (const other of ['cognitive', 'cyclomatic', 'statements']) {
-              if (other !== field) assert.equal(node.score[other], scores[index][other]);
-            }
-          });
-        }
+        const scoreCognitive = language === 'rust' ? rustCognitive : jsCognitive;
+        scoreCognitive(prepared);
+        assert.equal(structure(prepared.tree), shape);
         analysis = analyzerFor(language).analyze(parser.tree, source, fileId);
         assert.equal(structure(analysis.tree), shape);
         assert.deepEqual(walk(analysis.tree).map(node => node.score), before.map(node => node.score));
@@ -93,15 +79,15 @@ for (const [language, file, source, expected] of cases) {
       const fn = analysis.functions[0];
       const nodes = walk(analysis.tree);
       const owner = fn.id;
-      assert.deepEqual(fn.root.score, {cognitive: 0, cyclomatic: 1, statements: 0});
+      assert.deepEqual(fn.root.score, {cognitive: 0});
       const localScores = language === 'rust' ? [
-        ['macro_invocation', {cognitive: 0, cyclomatic: 0, statements: 1}],
-        ['&&', {cognitive: 1, cyclomatic: 1, statements: 0}],
-        ['call_expression', {cognitive: 0, cyclomatic: 0, statements: 1}],
+        ['macro_invocation', {cognitive: 0}],
+        ['&&', {cognitive: 1}],
+        ['call_expression', {cognitive: 0}],
       ] : [
-        ['variable_declarator', {cognitive: 0, cyclomatic: 0, statements: 1}],
-        ['new_expression', {cognitive: 0, cyclomatic: 0, statements: 1}],
-        ['call_expression', {cognitive: 0, cyclomatic: 0, statements: 1}],
+        ['variable_declarator', {cognitive: 0}],
+        ['new_expression', {cognitive: 0}],
+        ['call_expression', {cognitive: 0}],
       ];
       for (const [type, score] of localScores) {
         const matches = nodes.filter(node => node.type === type);
@@ -119,8 +105,8 @@ for (const [language, file, source, expected] of cases) {
       assert.equal(result.functionDiscoveryComplete, true);
       assert.equal(result.functions.length, 1);
       assert.equal(result.functions[0].id, owner);
-      assert.deepEqual(Object.values(result.functions[0].metrics), expected);
-      assert.deepEqual(Object.values(result.functions[0].byRow.get(1)), expected);
+      assert.deepEqual(result.functions[0].metrics, {cognitive: expected});
+      assert.equal(result.functions[0].byRow.get(1)?.cognitive ?? 0, expected);
       assert.deepEqual(result.functions[0].rootRange, {
         startIndex: 0, endIndex: source.length,
         startPosition: {row: 0, column: 0}, endPosition: {row: 0, column: source.length},
@@ -137,21 +123,20 @@ for (const [language, file, source, expected] of cases) {
         if (format === 'json') {
           const report = JSON.parse(output.stdout);
           assert.deepEqual(report.diagnostics, []);
-          assert.deepEqual(Object.values(report.functions[0].metrics), expected);
+          assert.deepEqual(report.functions[0].metrics, {cognitive_complexity: expected});
           assert.equal(report.functions.length, 1);
           assert.equal(report.summary.has_errors, false);
           assert.equal(report.summary.function_discovery_complete, true);
         } else if (format === 'markdown') {
           const row = output.stdout.split('\n').find(line => line.startsWith('| f |'));
           assert.ok(row);
-          assert.deepEqual(row.split('|').slice(-5, -2).map(cell => Number(cell.trim())), expected);
+          assert.equal(row.split('|').at(-3).trim(), String(expected));
         } else if (format === 'csv') {
           const row = output.stdout.split('\n').find(line => line.startsWith('f,'));
           assert.ok(row);
-          assert.deepEqual(row.split(',').slice(-4, -1).map(Number), expected);
+          assert.equal(row.split(',').at(-2), String(expected));
         } else {
-          const annotation = `${source} // Cognitive: +${expected[0]}; Cyclomatic: +${expected[1]}; Statements: +${expected[2]}`
-            .replace('Cognitive: +0', 'Cognitive: 0');
+          const annotation = `${source} // Cognitive: ${expected > 0 ? "+" + expected : "0"}`;
           assert.ok(output.stdout.includes(annotation));
           assert.ok(!output.stdout.includes('niepełna analiza'));
         }

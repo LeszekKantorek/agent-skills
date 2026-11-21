@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from '../scripts/parser.mjs';
-import { outerFunctions, functionName } from '../scripts/ir.mjs';
+import { analyzerFor } from '../scripts/analyzers/registry.mjs';
 
 test('finds only outer functions and preserves anonymous names', async () => {
   for (const [language, source, names] of [
@@ -11,7 +11,9 @@ test('finds only outer functions and preserves anonymous names', async () => {
     const parsed = await parse(source, language);
     try {
       assert.equal(parsed.tree.rootNode.hasError, false);
-      assert.deepEqual(outerFunctions(parsed.tree.rootNode).map(functionName), names);
+      const prepared = analyzerFor(language).prepare(parsed.tree, source, 'fixture');
+      assert.deepEqual(prepared.functions.map(fn => fn.name), names);
+      assert.deepEqual(prepared.diagnostics, []);
     } finally { parsed.dispose(); }
   }
 });

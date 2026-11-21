@@ -10,21 +10,21 @@ import {analyze} from '../scripts/analyzers/rust/analyze.mjs';
 
 const walk = n => [n, ...n.children.flatMap(walk)];
 async function run(source) { const p = await parse(source, 'rust'); try { return analyze(p.tree, source, 'file'); } finally { p.dispose(); } }
-const score = p => walk(p.tree).reduce((a,n) => a.map((v,i) => v + n.score[['cognitive','cyclomatic','statements'][i]]), [0,0,0]);
+const score = p => walk(p.tree).reduce((sum,n)=>sum+n.score.cognitive,0);
 const slice = (s,n) => s.slice(n.startIndex,n.endIndex);
 
 test('M16 and general expression lists preserve independent contributions', async () => {
   // M16: .local/code-complexity-metrics-plan/inwentaryzacja-makr-msfs2024.json, src/providers/simconnect/native.rs:1144:25.
   for (const [args, expected] of [
-    ['0; size', [0,1,1]], ['a; b', [0,1,1]], ['Vec::new(); b', [0,1,2]],
-    ['good(); func()', [0,1,3]], ['first(); second(); third()', [0,1,4]],
-    ['first(), second(), third()', [0,1,4]], ['a; ready && limit()', [1,2,2]],
-    ['f(a, b); g()', [0,1,3]],
+    ['0; size', 0], ['a; b', 0], ['Vec::new(); b', 0],
+    ['good(); func()', 0], ['first(); second(); third()', 0],
+    ['first(), second(), third()', 0], ['a; ready && limit()', 1],
+    ['f(a, b); g()', 0],
   ]) for (const [name,open,close] of [['vec','[',']'],['unknown','(',')'],['m','{','}']]) {
     const source = `// 😀\r\nfn f(){${name}!${open}${args}${close};}`, p = await run(source);
-    assert.deepEqual(p.diagnostics, [], source); assert.deepEqual(score(p), expected, source);
+    assert.deepEqual(p.diagnostics, [], source); assert.equal(score(p), expected, source);
     const macro = walk(p.tree).find(n => n.type === 'macro_invocation');
-    assert.equal(macro.score.statements, 1);
+
     const children = macro.children.filter(n => n.field === 'argument');
     assert.equal(children.length, args.startsWith('first()') ? 3 : 2);
     for (const n of children) { assert.equal(p.ownerByNode.get(n), p.functions[0].id); assert.equal(n.startIndex, source.indexOf(slice(source,n))); assert.equal(n.startPosition.column, n.startIndex - source.lastIndexOf('\n',n.startIndex-1)-1); }
@@ -40,7 +40,7 @@ test('attribute values reject metavariables, while token arguments remain opaque
   for (const separator of [';', ',']) for (const args of [`#[dummy($x)] f()${separator} g()`, `f()${separator} #[dummy($x)] g()`]) {
     const p = await run(`fn f(){probe!(${args});}`);
     assert.deepEqual(p.diagnostics, [], args);
-    assert.deepEqual(score(p), [0,1,3], args);
+    assert.equal(score(p), 0, args);
   }
 });
 
@@ -48,22 +48,22 @@ test('written calls and logical operators retain their own ranges and nesting', 
   const source = 'fn f(){ if outer { m![good(); ready && limit()]; } }';
   const p = await run(source), nodes = walk(p.tree), macro = nodes.find(n => n.type === 'macro_invocation');
   assert.deepEqual(p.diagnostics, []);
-  assert.deepEqual(score(p), [2,3,4]);
+  assert.equal(score(p), 2);
   assert.deepEqual(macro.children.filter(n => n.field === 'argument').map(n => slice(source,n)), ['good()', 'ready && limit()']);
-  assert.deepEqual(nodes.filter(n => n.type === 'call_expression').map(n => [slice(source,n), n.score.statements]), [['good()', 1], ['limit()', 1]]);
+  assert.deepEqual(nodes.filter(n => n.type === 'call_expression').map(n => slice(source,n)), ['good()', 'limit()']);
   const and = nodes.find(n => n.type === '&&');
-  assert.deepEqual(and.score, {cognitive: 1, cyclomatic: 1, statements: 0});
+  assert.deepEqual(and.score, {cognitive: 1});
   assert.ok(!nodes.some(n => n.type === ';' && n.startIndex === source.indexOf(';')));
 });
 
 test('complete validation keeps blocks, nested token trees, contexts and rejects mixed lists', async () => {
   for (const [fragment, expected] of [
-    ['m!({first(); second();})', [0,1,4]],
-    ['m!([0; size]; f(a,b))', [0,1,2]],
-    ['m!(|a, b| a + b; g())', [0,1,3]],
-    ['m!(a && b; c && d)', [2,3,1]],
-    ['m!(inner!(a; b); g())', [0,1,3]],
-  ]) { const p = await run(`fn f(){${fragment};}`); assert.deepEqual(p.diagnostics, [], fragment); assert.deepEqual(score(p), expected, fragment); }
+    ['m!({first(); second();})', 0],
+    ['m!([0; size]; f(a,b))', 0],
+    ['m!(|a, b| a + b; g())', 0],
+    ['m!(a && b; c && d)', 2],
+    ['m!(inner!(a; b); g())', 0],
+  ]) { const p = await run(`fn f(){${fragment};}`); assert.deepEqual(p.diagnostics, [], fragment); assert.equal(score(p), expected, fragment); }
   for (const fragment of ['m!(a; => b)', 'm!(a;)', 'm!(;b)', 'm!(a;;b)', 'm!(a,b;c)', 'm!(a;b,c)', 'm!(a,;b)', 'm!(a;b,)', 'm!(v, A {..}; x)', 'm!({"x": f()}; g())']) {
     const p = await run(`fn f(){${fragment};}`); assert.ok(p.diagnostics.length, fragment); assert.equal(walk(p.tree).filter(n => n.field === 'argument').length, 0, fragment);
   }
@@ -87,13 +87,13 @@ test('metavariables are not expressions outside definitions or nested macro toke
   }
 });
 
-test('semicolon list points appear on original lines in CLI explain', async () => {
+test('semicolon list Cognitive points appear on original lines in CLI explain', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'metric-semicolon-'));
   try {
     await writeFile(path.join(dir, 'input.rs'), 'fn f(){\n m![good();\n ready && limit()];\n}');
     const cli = fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
     const invoke = (...args) => spawnSync(process.execPath, [cli, '--path', 'input.rs', ...args], {cwd:dir, encoding:'utf8'});
-    const result = invoke(); assert.equal(result.status,0); assert.deepEqual(Object.values(JSON.parse(result.stdout).functions[0].metrics), [1,2,3]);
-    const explain = invoke('--explain'); assert.equal(explain.status,0); assert.match(explain.stdout, /ready && limit\(\).*Cognitive: \+1; Cyclomatic: \+1; Statements: \+1/);
+    const result = invoke(); assert.equal(result.status,0); assert.equal(JSON.parse(result.stdout).functions[0].metrics.cognitive_complexity,1);
+    const explain = invoke('--explain'); assert.equal(explain.status,0); assert.match(explain.stdout, /ready && limit\(\).*Cognitive: \+1/);
   } finally { await rm(dir, {recursive:true, force:true}); }
 });

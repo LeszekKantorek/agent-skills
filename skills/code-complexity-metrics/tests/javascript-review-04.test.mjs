@@ -18,7 +18,7 @@ test('R04-02 errors affect each recovered owner and preserve independent functio
  const ds=p.diagnostics.filter(d=>d.category==='parse');
  assert.deepEqual(new Set(ds.filter(d=>d.owner!==null).map(d=>d.owner)),new Set([a.id,b.id]));
  assert.ok(ds.some(d=>d.owner===null&&d.affectsFunctionDiscovery)); assert.ok(!ds.some(d=>d.owner===good.id));
- for(const d of ds){assert.deepEqual(d.affectedMetrics,['cognitive','cyclomatic','statements']);assert.equal(d.range.startIndex,0);assert.equal(d.range.endIndex,21)}
+ for(const d of ds){assert.deepEqual(d.affectedMetrics,['cognitive']);assert.equal(d.range.startIndex,0);assert.equal(d.range.endIndex,21)}
  const q=await get('function f(){ const x = ; work(); } function good(){}'); assert.ok(q.diagnostics.some(d=>d.owner===q.functions[0].id)); assert.ok(!q.diagnostics.some(d=>d.owner===q.functions[1].id)); assert.equal(of(q.tree,'call_expression').length,1);
 });
 test('R04-03 using declarations retain binding and initializer roles',async()=>{

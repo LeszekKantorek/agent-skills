@@ -1,5 +1,5 @@
-const KEYS = ['cognitive', 'cyclomatic', 'statements'];
-const zero = () => ({cognitive: 0, cyclomatic: 0, statements: 0});
+const KEYS = ['cognitive'];
+const zero = () => ({cognitive: 0});
 const add = (to, from) => { for (const k of KEYS) to[k] += from[k]; };
 const range = n => ({startIndex: n.startIndex, endIndex: n.endIndex, startPosition: {...n.startPosition}, endPosition: {...n.endPosition}});
 const validPosition = p => p && Number.isSafeInteger(p.row) && p.row >= 0 && Number.isSafeInteger(p.column) && p.column >= 0;

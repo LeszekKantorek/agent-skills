@@ -1,17 +1,17 @@
 ---
 name: code-complexity-metrics
-description: Measure Cognitive Complexity, Cyclomatic Complexity, and Statement Count for Rust and JavaScript source functions using the bundled local analyzer.
+description: Measure and explain Cognitive Complexity for Rust and JavaScript functions with the bundled local analyzer. Use it to review control flow and compare revisions.
 ---
 
 # Code Complexity Metrics
 
-## Scoring specification and implementation status
+## Scoring rules
 
-The [generic metric rules](scripts/rules/generic-metric-rules.md) define the target version 2.0 profile and recursive composition. Read them with the [Rust mappings](scripts/rules/rust-metric-rules.md) or [JavaScript mappings](scripts/rules/javascript-metric-rules.md) when interpreting or changing scoring rules.
+The [generic metric rules](scripts/rules/generic-metric-rules.md) define Cognitive Complexity scoring and recursive composition. Read them with the [Rust mappings](scripts/rules/rust-metric-rules.md) or [JavaScript mappings](scripts/rules/javascript-metric-rules.md) when interpreting or changing scoring rules.
 
 Rules version: **2.0**. Recognized Rust macro arguments contribute recursively; unsupported syntax produces diagnostics.
 
-Reports record the application version. The analyzer uses rules version 2.0. Derive new combinations from shared rules; request a new rule only for a genuine classification gap or conflict.
+Reports record the application version. Derive new combinations from shared rules. Request a new rule for a genuine classification gap or conflict.
 
 ## Usage
 
@@ -53,12 +53,12 @@ Notes:
 * All requested or matched files are analyzed, without additional exclusions.
 * Unmatched globs add no files. With no input files, the report is empty.
 * CSV begins with three # metadata lines before its header.
-* Function records contain `name`, `location`, `metrics`, and `error`. Locations use
+* Function records contain `name`, `location`, `metrics`, and `error`. The metric is `cognitive_complexity`. Locations use
   `file:line:column:length`; read the three numeric fields from the right.
   Paths are relative to the working directory when possible. Lines and columns
   start at 1; columns and lengths use UTF-16 units.
 * Every error is reported on standard error and results in exit code 1. When at least one input is analyzed successfully or confirmed to have an unsupported language, a partial report is published to standard output or atomically to `--output`. A failed write leaves the destination unchanged. Input aliases are protected.
-* Function metrics exclude all contributions assigned to physical lines covered by diagnostics. `Error` identifies the first relevant diagnostic; an empty cell or JSON null means no relevant error. Discovery completeness remains a separate field.
+* Cognitive Complexity excludes all contributions assigned to physical lines covered by diagnostics. `Error` identifies the first relevant diagnostic. An empty cell or JSON null means no relevant error. Discovery completeness remains a separate field.
 
 * 0  No error.
 * 1  An error occurred. A partial report can be published when a reliable input result is available.
@@ -66,26 +66,7 @@ Notes:
 
 ## Use the results in code review
 
-* See the [Rust statement scorer case study](references/rust-statement-scorer-refactoring.md) for an example of choosing which metric to optimize.
-* See the [Rust AST preparation case study](references/rust-ast-preparation-refactoring.md) for an example of splitting work into stages to improve readability.
-* See the [named AST conditions case study](references/named-ast-conditions.md) for examples of naming conditions and `find()` predicates.
-* See the [aggregation refactoring case study](references/aggregation-refactoring.md) for an example of simplifying repeated work before extracting stages.
-* Use the report to identify functions that need closer review and to track complexity changes between revisions.
-* The measurements describe syntax. They do not establish correctness, architectural quality, or runtime performance.
-
-### Understand the three signals
-
-Keep the metrics separate when selecting code to inspect:
-
-| Metric | Meaning | Review focus |
-| --- | --- | --- |
-| Cognitive Complexity | An indicator of difficulty understanding control flow, including nesting. | Inspect nested decisions and interruptions to linear reading. |
-| Cyclomatic Complexity | A count of decision constructs under this project's rules, with one base point per outer. | Inspect conditions, alternatives, and the tests covering their behavior. The score is not a required number of tests. |
-| Statement Count | Implementation size measured through statements and operations, including explicit calls. | Inspect long sequences of work and whether the function combines distinct responsibilities. |
-
-* A large Statement Count can accompany simple control flow. A short function can contain deeply nested decisions.
-* For example, three flat `if` statements score Cognitive 3, while three nested `if` statements score Cognitive 6.
-* Both score Cyclomatic 4 when they are the only decisions in an outer.
+Cognitive Complexity describes how control flow and nesting affect reading. Three flat `if` statements score 3, while three nested `if` statements score 6. Use the annotated source to see where those points come from.
 
 ### Investigate a result
 
@@ -107,7 +88,16 @@ Keep the metrics separate when selecting code to inspect:
 
 * Measure both revisions with the same analyzer, rules, input scope, and filter.
 * Match corresponding functions using their source context. Locations can change, and names need not be unique.
-* Explain each metric's change using the changed constructs and required behavior.
+* Explain changes in Cognitive Complexity using the changed constructs and required behavior.
 * When code moves into another outer, inspect both functions. A lower score in the original function can reflect redistribution.
 * After an authorized refactoring, rerun measurements and relevant behavior tests. A lower score alone does not prove improvement.
-* Identify incomplete runs and functions with `Error` before comparing results. Metrics with an error exclude affected physical lines.
+* Identify incomplete runs and functions with `Error` before comparing results. Scores with an error exclude affected physical lines.
+
+### Historical refactoring cases
+
+These cases use analyzer version 1.x and include the metrics it reported at the time.
+
+* [Rust statement scorer](references/rust-statement-scorer-refactoring.md) uses two refactoring passes and changes which metric guides the second pass.
+* [Rust AST preparation](references/rust-ast-preparation-refactoring.md) splits traversal work into named stages.
+* [Named AST conditions](references/named-ast-conditions.md) uses named conditions and `find()` predicates to describe what the code checks.
+* [Aggregation](references/aggregation-refactoring.md) removes repeated work before extracting stages.

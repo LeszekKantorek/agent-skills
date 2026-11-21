@@ -7,13 +7,12 @@ import {parse} from '../scripts/parser.mjs';
 import {analyze as rust} from '../scripts/analyzers/rust/analyze.mjs';
 import {analyze as javascript} from '../scripts/analyzers/javascript/analyze.mjs';
 
-// Independent anchors: one outer base, one statement per written call, no decisions.
+// Independent anchors: one outer contains all written calls and no Cognitive points.
 const seed = 0x8c0ffee;
 const depths = [1, 2, 4, 8, 16];
 const walk = n => [n, ...n.children.flatMap(walk)];
 const expected = depth => ({
-  metrics: [0, 1, depth], calls: depth, callScores: Array(depth).fill(1),
-  callVectors: Array.from({length: depth}, () => [0, 0, 1]),
+  cognitive: 0, calls: depth, callScores: Array(depth).fill(0),
 });
 
 function sourceFor(language, shape, depth) {
@@ -41,14 +40,13 @@ async function inspect(language, shape, depth) {
     }
     const fn = p.functions[0];
     const nodes = walk(p.tree).filter(n => p.ownerByNode.get(n) === fn?.id);
-    const actual = ['cognitive', 'cyclomatic', 'statements'].map(k => nodes.reduce((sum, n) => sum + n.score[k], 0));
+    const actual = nodes.reduce((sum, n) => sum + n.score.cognitive, 0);
     // Inspect calls under the outer independently of the owner map, so a missing owner cannot hide a call.
     const calls = fn ? walk(fn.root).filter(n => n.type === 'call_expression') : [];
     return {
       source, parseError: parsed.tree.rootNode.hasError, functions: p.functions.length,
       diagnostics: p.diagnostics, actual, calls: calls.length,
-      callScores: calls.map(n => n.score.statements),
-      callVectors: calls.map(n => [n.score.cognitive, n.score.cyclomatic, n.score.statements]),
+      callScores: calls.map(n => n.score.cognitive),
       callOwners: calls.map(n => p.ownerByNode.get(n) === fn.id),
     };
   } catch (error) {
@@ -58,45 +56,42 @@ async function inspect(language, shape, depth) {
   }
 }
 
-// Include the side of a relation, metric deltas and exact local deviations in the identity.
+// Include the side of a relation, the score delta and exact local deviations in the identity.
 // A smaller candidate is accepted only when it preserves every part of this discrepancy.
 function discrepancy(result, depth) {
   if (result.error) return {error: result.error};
   return {
     parseError: result.parseError, functions: result.functions,
     diagnostics: result.diagnostics.map(d => d.code),
-    delta: result.actual.map((value, index) => value - expected(depth).metrics[index]),
+    delta: result.actual - expected(depth).cognitive,
     callDelta: result.calls - depth,
-    badCalls: result.callScores.flatMap((value, index) => value === 1 ? [] : [[index, value]]),
-    badVectors: result.callVectors.flatMap((value, index) =>
-      value[0] === 0 && value[1] === 0 && value[2] === 1 ? [] : [[index, value]]),
+    badCalls: result.callScores.flatMap((value, index) => value === 0 ? [] : [[index, value]]),
     wrongOwners: result.callOwners.flatMap((value, index) => value ? [] : [index]),
   };
 }
 function isCorrect(result, depth) {
   const d = discrepancy(result, depth);
   return !d.error && !d.parseError && d.functions === 1 && d.diagnostics.length === 0 &&
-    d.delta.every(n => n === 0) && d.callDelta === 0 && d.badCalls.length === 0 &&
-    d.badVectors.length === 0 && d.wrongOwners.length === 0;
+    d.delta === 0 && d.callDelta === 0 && d.badCalls.length === 0 && d.wrongOwners.length === 0;
 }
 async function evaluate(language, shape, depth, relation) {
   const primary = await inspect(language, shape, depth);
   const transformed = relation ? await inspect(language, shape, depth + 1) : null;
   const difference = transformed && !primary.error && !transformed.error
-    ? transformed.actual.map((value, index) => value - primary.actual[index]) : null;
+    ? transformed.actual - primary.actual : null;
   return {depth, primary, transformed, difference};
 }
 function signature(result) {
   return JSON.stringify({
     primary: discrepancy(result.primary, result.depth),
     transformed: result.transformed ? discrepancy(result.transformed, result.depth + 1) : null,
-    differenceDelta: result.difference ? result.difference.map((value, index) => value - [0, 0, 1][index]) : null,
+    difference: result.difference,
   });
 }
 function passes(result) {
   return isCorrect(result.primary, result.depth) &&
     (!result.transformed || (isCorrect(result.transformed, result.depth + 1) &&
-      result.difference.every((value, index) => value === [0, 0, 1][index])));
+      result.difference === 0));
 }
 async function recordFailure(id, language, shape, original, relation, testContext) {
   const originalSignature = signature(original);
@@ -110,7 +105,7 @@ async function recordFailure(id, language, shape, original, relation, testContex
     expected: Object.fromEntries([['original', original], ['reduced', reduced]].map(([key, value]) => [key, {
       primary: expected(value.depth),
       transformed: relation ? expected(value.depth + 1) : null,
-      difference: relation ? [0, 0, 1] : null,
+      difference: relation ? 0 : null,
       parseError: false, functions: 1, diagnostics: [], allCallOwners: true,
     }])),
     discrepancy: JSON.parse(originalSignature),
@@ -132,11 +127,10 @@ function assertVariant(result, depth, label) {
   assert.equal(result.parseError, false, `${label}: accepted parse`);
   assert.equal(result.functions, 1, `${label}: one outer`);
   assert.deepEqual(result.diagnostics, [], `${label}: complete metrics`);
-  assert.deepEqual(result.actual, expected(depth).metrics, `${label}: independent metric anchors`);
+  assert.equal(result.actual, expected(depth).cognitive, `${label}: independent metric anchors`);
   assert.equal(result.calls, depth, `${label}: all written calls retained`);
   assert.deepEqual(result.callOwners, Array(depth).fill(true), `${label}: call ownership`);
   assert.deepEqual(result.callScores, expected(depth).callScores, `${label}: local call contributions`);
-  assert.deepEqual(result.callVectors, expected(depth).callVectors, `${label}: local call metric vectors`);
 }
 
 for (const language of ['rust', 'javascript']) for (const shape of ['chain', 'nested']) for (const depth of depths) {
@@ -148,7 +142,7 @@ for (const language of ['rust', 'javascript']) for (const shape of ['chain', 'ne
   });
 }
 
-// Adding one call preserves the discarded-result role and owner while adding one statement.
+// Adding one call preserves the Cognitive score and the caller’s owner.
 for (const language of ['rust', 'javascript']) for (const shape of ['chain', 'nested']) {
   const id = `G08-relation-${language}-${shape}`;
   test(id, async t => {
@@ -157,7 +151,7 @@ for (const language of ['rust', 'javascript']) for (const shape of ['chain', 'ne
       if (!passes(result)) await recordFailure(id, language, shape, result, true, t);
       assertVariant(result.primary, depth, `primary depth ${depth}`);
       assertVariant(result.transformed, depth + 1, `transformed depth ${depth + 1}`);
-      assert.deepEqual(result.difference, [0, 0, 1], `metric difference at depth ${depth}`);
+      assert.equal(result.difference, 0, `metric difference at depth ${depth}`);
       assert.equal(result.transformed.calls - result.primary.calls, 1, `call difference at depth ${depth}`);
     }
   });

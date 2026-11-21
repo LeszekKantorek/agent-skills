@@ -5,7 +5,6 @@ import {analyze as rust} from '../scripts/analyzers/rust/analyze.mjs';
 import {analyze as javascript} from '../scripts/analyzers/javascript/analyze.mjs';
 const walk=n=>[n,...n.children.flatMap(walk)];
 // Cognitive: first operator and every change; negation starts a new sequence.
-// Cyclomatic: each operator is a decision, independently of Cognitive.
 const cases=[
  ['and','a && b && c',[1,0]],
  ['or','a || b || c',[1,0]],
@@ -27,12 +26,12 @@ for(const language of ['rust','javascript']) for(const [id,expression,cognitive]
    const operators=walk(p.tree).filter(n=>['&&','||'].includes(n.type)).sort((a,b)=>a.startIndex-b.startIndex);
    assert.equal(operators.length,cognitive.length);
    assert.deepEqual(operators.map(n=>n.score.cognitive),cognitive);
-   assert.deepEqual(operators.map(n=>n.score.cyclomatic),Array(cognitive.length).fill(1));
+
    assert.ok(operators.every(n=>p.ownerByNode.get(n)===owner));
-   assert.equal(p.functions[0].root.score.cyclomatic,1);
+
    const nodes=walk(p.tree).filter(n=>p.ownerByNode.get(n)===owner);
    assert.equal(nodes.reduce((sum,n)=>sum+n.score.cognitive,0),cognitive.reduce((a,b)=>a+b,0));
-   assert.equal(nodes.reduce((sum,n)=>sum+n.score.cyclomatic,0),1+cognitive.length);
+
   } finally {parser.dispose()}
  });
 }
@@ -44,7 +43,7 @@ for(const [language,source] of [
   assert.equal(parser.tree.rootNode.hasError,false);const p=(language==='rust'?rust:javascript)(parser.tree,source,'logic');
   assert.equal(p.functions.length,1);assert.deepEqual(p.diagnostics,[]);const owner=p.functions[0].id;
   const nodes=walk(p.tree).filter(n=>p.ownerByNode.get(n)===owner),ops=nodes.filter(n=>n.type==='&&').sort((a,b)=>a.startIndex-b.startIndex);
-  assert.deepEqual(ops.map(n=>[n.score.cognitive,n.score.cyclomatic]),Array(5).fill([1,1]));
-  assert.equal(nodes.reduce((s,n)=>s+n.score.cognitive,0),5);assert.equal(nodes.reduce((s,n)=>s+n.score.cyclomatic,0),6);
+  assert.deepEqual(ops.map(n=>n.score.cognitive),Array(5).fill(1));
+  assert.equal(nodes.reduce((s,n)=>s+n.score.cognitive,0),5);
  }finally{parser.dispose()}
 });

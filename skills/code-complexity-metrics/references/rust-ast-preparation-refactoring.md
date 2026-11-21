@@ -1,5 +1,7 @@
 # Split Rust AST preparation into stages
 
+This case uses metrics reported by analyzer version 1.x.
+
 `prepare()` combined recursive AST copying, macro recovery, function discovery, diagnostics, and presentation. Macro recovery contained the deepest nesting because the copy loop also handled malformed delimiters, parser selection, and doc attribute validation.
 
 1. **Try a local refactor.** We separated macro handling from the copy loop and removed repeated checks. The prototype lowered all three metrics while keeping the work inside one outer function.

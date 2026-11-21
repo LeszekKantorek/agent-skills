@@ -4,8 +4,6 @@ import { readFileSync } from 'node:fs';
 const applicationVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const compare = (a, b) => a === b ? 0 : a === null ? -1 : b === null ? 1 : a < b ? -1 : 1;
-const metricOrder = ['cognitive', 'cyclomatic', 'statements'];
-const metricLabels = ['Cognitive', 'Cyclomatic', 'Statements'];
 
 // Encode the original characters in one pass; renderers must not repeat it.
 const publicText = value => value === null ? null : value.replace(/[\\\x00-\x1f\x7f-\x9f\u2028\u2029]/g, char => {
@@ -16,13 +14,6 @@ const publicText = value => value === null ? null : value.replace(/[\\\x00-\x1f\
   return `\\u${char.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
 });
 
-function publicMetrics(metrics) {
-  return {
-    cognitive_complexity: metrics.cognitive,
-    cyclomatic_complexity: metrics.cyclomatic,
-    statement_count: metrics.statements,
-  };
-}
 function displayPath(fileId) {
   if (!path.isAbsolute(fileId)) return fileId;
   // Only strip namespace prefixes whose ordinary Windows equivalents are known.
@@ -75,7 +66,7 @@ export function makeReport(aggregate, filter) {
   const functions = selected.map(record => ({
     name: functionLocationsById.get(record.id).name,
     location: functionLocationsById.get(record.id).location,
-    metrics: publicMetrics(record.metrics),
+    metrics: { cognitive_complexity: record.metrics.cognitive },
     error: record.error ? publicText(errorText(record.error)) : null,
   }));
   return {
@@ -123,10 +114,10 @@ export function diagnosticText(report) {
 }
 export function csv(report) {
   const lines = ['# Code Complexity Metrics', `# ${meta(report)}`, `# ${version(report)}`,
-    'Name,Location,Cognitive,Cyclomatic,Statements,Error'];
+    'Name,Location,Cognitive,Error'];
   for (const record of report.functions) {
-    const metrics = Object.values(record.metrics).map(value => value === null ? 'null' : value);
-    lines.push([record.name ?? '', record.location, ...metrics, record.error].map(csvCell).join(','));
+    const cognitive = record.metrics.cognitive_complexity;
+    lines.push([record.name ?? '', record.location, cognitive === null ? 'null' : cognitive, record.error].map(csvCell).join(','));
   }
   return lines.join('\n') + '\n';
 }
@@ -160,13 +151,12 @@ function renderExplain(record, aggregate) {
     else groups.push([row]);
   }
   function annotation(row) {
-    const points = record.byRow.get(row);
-    return metricOrder.map((key, index) => {
-      const incomplete = record.metrics[key] === null;
-      const value = incomplete && !points?.[key] ? 'brak znanego wkładu' : points?.[key] ?? 0;
-      const display = typeof value === 'number' && value > 0 ? `+${value}` : value;
-      return `${metricLabels[index]}: ${display}${incomplete && points?.[key] ? ' (częściowe)' : ''}`;
-    }).join('; ') + (record.errorRows?.has(row) ? ` // error: ${record.errorRows.get(row).map(d => publicText(errorText(d))).join('; ')}` : '');
+    const points = record.byRow.get(row)?.cognitive ?? 0;
+    const incomplete = record.metrics.cognitive === null;
+    const display = points > 0 ? `+${points}` : incomplete ? 'brak znanego wkładu' : '0';
+    const errors = record.errorRows?.get(row);
+    return `Cognitive: ${display}${incomplete && points ? ' (częściowe)' : ''}`
+      + (errors ? ` // error: ${errors.map(d => publicText(errorText(d))).join('; ')}` : '');
   }
   let output = '';
   for (const group of groups) {
@@ -191,13 +181,13 @@ export function markdown(report, selected, aggregate, explain = false) {
     for (let index = 0; index < selected.length; index++) {
       const record = report.functions[index];
       output += `## ${headerCell(record.name ?? '(anonymous)')} — ${headerCell(record.location)}\n\n`;
-      output += `Cognitive: ${label(record.metrics.cognitive_complexity)}; Cyclomatic: ${label(record.metrics.cyclomatic_complexity)}; Statements: ${label(record.metrics.statement_count)}\n\n`;
+      output += `Cognitive: ${label(record.metrics.cognitive_complexity)}\n\n`;
       output += renderExplain(selected[index], aggregate);
     }
   } else {
-    output += '| Name | Location | Cognitive | Cyclomatic | Statements | Error |\n| --- | --- | ---: | ---: | ---: | --- |\n';
+    output += '| Name | Location | Cognitive | Error |\n| --- | --- | ---: | --- |\n';
     for (const record of report.functions) {
-      output += `| ${cell(record.name ?? '(anonymous)')} | ${cell(record.location)} | ${label(record.metrics.cognitive_complexity)} | ${label(record.metrics.cyclomatic_complexity)} | ${label(record.metrics.statement_count)} | ${cell(record.error ?? '')} |\n`;
+      output += `| ${cell(record.name ?? '(anonymous)')} | ${cell(record.location)} | ${label(record.metrics.cognitive_complexity)} | ${cell(record.error ?? '')} |\n`;
     }
     output += '\n';
   }

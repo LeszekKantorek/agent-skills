@@ -17,6 +17,7 @@ const schemaTypeChecks = new Map([
 ]);
 function valid(s, v) {
   if (s.anyOf && !s.anyOf.some(branch => valid(branch, v))) return false;
+  if (Object.hasOwn(s, 'const') && s.const !== v) return false;
   if (s.enum && !s.enum.includes(v)) return false;
   const types = Array.isArray(s.type) ? s.type : [s.type];
   if (s.type && !types.some(type => schemaTypeChecks.has(type) ? schemaTypeChecks.get(type)(v) : typeof v === type)) return false;
@@ -30,10 +31,10 @@ function valid(s, v) {
   }
   return true;
 }
-const complete = { version: '1.0.0', summary: { files: 1, functions_found: 1, functions_presented: 1, function_discovery_complete: true, has_errors: false }, files: [{ fileId: '/x.js', analyzed: true, functionDiscoveryComplete: true }], functions: [{ name: 'f', location: 'x.js:1:1:2', metrics: { cognitive_complexity: 0, cyclomatic_complexity: 1, statement_count: 2 }, error: null }], diagnostics: [{ error: 'X: x', name: 'f', location: 'x.js:1:1:2' }] };
+const complete = { version: '2.0.0-dev.1', summary: { files: 1, functions_found: 1, functions_presented: 1, function_discovery_complete: true, has_errors: false }, files: [{ fileId: '/x.js', analyzed: true, functionDiscoveryComplete: true }], functions: [{ name: 'f', location: 'x.js:1:1:2', metrics: { cognitive_complexity: 0 }, error: null }], diagnostics: [{ error: 'X: x', name: 'f', location: 'x.js:1:1:2' }] };
 test('schema closes all report objects and validates required fields and types', () => {
   const empty = structuredClone(complete); empty.summary = { files: 0, functions_found: 0, functions_presented: 0, function_discovery_complete: true, has_errors: false }; empty.files = []; empty.functions = []; empty.diagnostics = [];
-  const partial = structuredClone(complete); partial.functions[0].metrics.statement_count = 0; partial.functions[0].error = 'X'; partial.functions[0].name = null; partial.diagnostics[0] = { error: 'X', name: null, location: 'x.js:0:0:null' }; partial.summary.has_errors = true;
+  const partial = structuredClone(complete); partial.functions[0].error = 'X'; partial.functions[0].name = null; partial.diagnostics[0] = { error: 'X', name: null, location: 'x.js:0:0:null' }; partial.summary.has_errors = true;
   for (const report of [empty, complete, partial]) assert.ok(valid(schema, report));
   let count = 0;
   function check(s, value, parts) {
@@ -50,7 +51,7 @@ test('schema closes all report objects and validates required fields and types',
     const copy = structuredClone(complete); let parent = copy; for (const part of parts) parent = parent[part]; parent.extra = true;
     assert.equal(valid(schema, copy), false, `extra ${parts.join('.')}`);
   }
-  check(schema, complete, []); assert.ok(count >= 21);
+  check(schema, complete, []); assert.equal(count, 21);
   for (const location of [':1:1:2', 'x:0:1:2', 'x:1:0:2', 'x:1:1:-1', 'x:1:1:null', 'x:1:1:2\n', 'x:1:1:2\r', 'x:1:1:2\u2028', 'x:1:1:2\u2029']) { const r = structuredClone(complete); r.functions[0].location = location; assert.equal(valid(schema, r), false, location); }
   for (const location of ['x:0:1:2', 'x:1:0:2', 'x:0:0:-1', 'x:1:1:null', ':0:0:null', 'x:0:0:null\n', 'x:0:0:1\r']) { const r = structuredClone(complete); r.diagnostics[0].location = location; assert.equal(valid(schema, r), false, location); }
   for (const location of ['x:0:0:0', 'x:0:0:null']) { const r = structuredClone(complete); r.diagnostics[0] = { error: 'X', name: null, location }; assert.ok(valid(schema, r), location); r.diagnostics[0].name = 'f'; assert.equal(valid(schema, r), false, location); }
@@ -60,7 +61,7 @@ test('schema closes all report objects and validates required fields and types',
   for (const fileId of [String.raw`/x\ny`, String.raw`/x\\ny`, String.raw`/x\u0085`]) { const r = structuredClone(complete); r.files[0].fileId = fileId; assert.ok(valid(schema, r), fileId); }
   for (const location of ['x\ny:1:1:2', String.raw`x\q:1:1:2`]) { const r = structuredClone(complete); r.functions[0].location = location; assert.equal(valid(schema, r), false, location); }
   const relative = structuredClone(complete); relative.files[0].fileId = 'x.js'; assert.equal(valid(schema, relative), false);
-  for (const mutate of [r => { r.version = ''; }, r => { r.summary.files = -1; }, r => { r.functions[0].metrics.statement_count = -1; }]) { const r = structuredClone(complete); mutate(r); assert.equal(valid(schema, r), false); }
+  for (const mutate of [r => { r.version = ''; }, r => { r.summary.files = -1; }, r => { r.functions[0].metrics.cognitive_complexity = -1; }, r => { r.functions[0].metrics.statement_count = 1; }, r => { r.functions[0].metrics.cyclomatic_complexity = 1; }]) { const r = structuredClone(complete); mutate(r); assert.equal(valid(schema, r), false); }
 });
 test('CLI uses module package version in all formats independently of cwd', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'schema7-'));
@@ -69,14 +70,14 @@ test('CLI uses module package version in all formats independently of cwd', asyn
     await writeFile(path.join(dir, 'good.js'), 'function f(){if(x){work();}}');
     await writeFile(path.join(dir, 'partial.rs'), 'fn f(){unknown!(a; => b);}');
     const cli = fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
-    assert.equal(pkg.version, '1.0.0'); assert.equal(lock.version, pkg.version); assert.equal(lock.packages[''].version, pkg.version);
+    assert.equal(pkg.version, '2.0.0-dev.1'); assert.equal(lock.version, pkg.version); assert.equal(lock.packages[''].version, pkg.version);
     for (const args of [[], ['--path', 'good.js'], ['--path', 'partial.rs']]) {
       const result = spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8' });
       assert.ok(result.stdout, result.stderr); const report = JSON.parse(result.stdout); assert.ok(valid(schema, report), args.join(' ')); assert.equal(report.version, pkg.version);
     }
     for (const args of [['--path', 'good.js', '--format', 'markdown'], ['--path', 'good.js', '--format', 'csv'], ['--path', 'good.js', '--explain']]) {
       const result = spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8' });
-      assert.equal(result.status, 0, result.stderr); assert.equal((result.stdout.match(/Version: 1\.0\.0/g) ?? []).length, 1); assert.ok(!result.stdout.includes('9.8.7'));
+      assert.equal(result.status, 0, result.stderr); assert.equal((result.stdout.match(/Version: 2\.0\.0-dev\.1/g) ?? []).length, 1); assert.ok(!result.stdout.includes('9.8.7'));
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
@@ -93,7 +94,7 @@ test('all formats read a changed version from an isolated package', async () => 
     await writeFile(path.join(cwd, 'good.js'), 'function f() {}');
     const cli = path.join(copy, 'scripts', 'measure.mjs');
     const run = args => { const result = spawnSync(process.execPath, [cli, '--path', 'good.js', ...args], { cwd, encoding: 'utf8' }); assert.equal(result.status, 0, result.stderr); return result.stdout; };
-    const report = JSON.parse(run([])); assert.ok(valid(schema, report)); assert.equal(report.version, '7.11.13');
+    const report = JSON.parse(run([])); assert.equal(valid(schema, report), false); assert.equal(report.version, '7.11.13');
     assert.deepEqual(Object.keys(report), ['version', 'summary', 'files', 'functions', 'diagnostics']);
     const summary = 'Files: 1; functions found: 1; functions presented: 1; function discovery complete: true; has errors: false';
     for (const args of [['--format', 'markdown'], ['--explain']]) {
@@ -101,6 +102,6 @@ test('all formats read a changed version from an isolated package', async () => 
       assert.deepEqual(lines.slice(0, 6), ['# Code Complexity Metrics', '', summary, '', 'Version: 7.11.13', '']);
     }
     const lines = run(['--format', 'csv']).split('\n');
-    assert.deepEqual(lines.slice(0, 4), ['# Code Complexity Metrics', `# ${summary}`, '# Version: 7.11.13', 'Name,Location,Cognitive,Cyclomatic,Statements,Error']);
+    assert.deepEqual(lines.slice(0, 4), ['# Code Complexity Metrics', `# ${summary}`, '# Version: 7.11.13', 'Name,Location,Cognitive,Error']);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

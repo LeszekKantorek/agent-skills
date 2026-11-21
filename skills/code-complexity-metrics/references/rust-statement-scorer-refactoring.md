@@ -1,5 +1,7 @@
 # Refactor the Rust statement scorer in two passes
 
+This case uses metrics reported by analyzer version 1.x.
+
 The original `statements()` was a recursive AST visitor with nested branches. It chose how to score and traverse each node based on its syntax and context, including the scope of `break`.
 
 1. **Reduce all three metrics.** We named the grammar checks and separated `break` scope. Cognitive, Cyclomatic, and Statement Count all fell.

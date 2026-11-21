@@ -229,7 +229,7 @@ function buildDiagnostics(issues, ownerByNode, fileId, range) {
     const affectsFunctionDiscovery = origin === null || uncertainOwners.has(origin);
     for (const owner of owners) {
       diagnostics.push({code, category, message, fileId, range: range(node.startIndex, node.endIndex),
-        owner, affectedMetrics: ['cognitive', 'cyclomatic', 'statements'], affectsFunctionDiscovery});
+        owner, affectedMetrics: ['cognitive'], affectsFunctionDiscovery});
     }
   }
   return diagnostics;

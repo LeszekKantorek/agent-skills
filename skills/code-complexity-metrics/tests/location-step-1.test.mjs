@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { makeReport } from '../scripts/public-report.mjs';
 
-const metrics = { cognitive: 0, cyclomatic: 1, statements: 0 };
+const metrics = { cognitive: 0 };
 function record(id, fileId, name, startIndex, endIndex, row, column) {
   return { id, fileId, name, metrics, rootRange: {
     startIndex, endIndex, startPosition: { row, column }, endPosition: { row, column: column + endIndex - startIndex },

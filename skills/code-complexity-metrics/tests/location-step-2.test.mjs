@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { makeReport } from '../scripts/public-report.mjs';
 const script = fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
 const run = (cwd, args, nodeArgs = []) => spawnSync(process.execPath, [...nodeArgs, script, ...args], { cwd, encoding: 'utf8' });
-const rec = (id, row, column, length, name = id) => ({ id, name, fileId: path.resolve('a.js'), rootRange: { startIndex: row * 100 + column, endIndex: row * 100 + column + length, startPosition: { row: row - 1, column: column - 1 } }, metrics: { cognitive: 0, cyclomatic: 1, statements: 0 } });
+const rec = (id, row, column, length, name = id) => ({ id, name, fileId: path.resolve('a.js'), rootRange: { startIndex: row * 100 + column, endIndex: row * 100 + column + length, startPosition: { row: row - 1, column: column - 1 } }, metrics: { cognitive: 0 } });
 const diag = (owner, code, fileId = path.resolve('a.js')) => ({ owner, code, message: 'problem', fileId, category: 'parse' });
 test('projects and sorts diagnostics numerically before filtering, with file lengths', () => {
   const functions = [rec('ten',10,1,2), rec('two',2,10,3), rec('short',2,2,1)];
