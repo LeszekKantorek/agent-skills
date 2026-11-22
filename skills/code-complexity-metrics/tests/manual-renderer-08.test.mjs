@@ -56,11 +56,11 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
   const table = markdown(report, selected, result);
   assert.match(table, /\| ok \|.*\| 1 \|/);
   assert.match(table, /\| bad \|.*\| null \(niepełna analiza\) \|/);
-  assert.match(table, /GLOBAL/);
-  assert.match(table, /PARTIAL/);
+  assert.match(table, /Function discovery: incomplete · Analysis errors/);
+  assert.doesNotMatch(table, /GLOBAL|PARTIAL/);
   const csvOutput = csv(report);
-  assert.match(csvOutput, /^ok,.*:1:1:15,1,0,0,0,0,0,$/m);
-  assert.match(csvOutput, /^bad,.*:2:1:16,null,0,0,0,0,0,$/m);
+  assert.match(csvOutput, /^ok,.*:1:1:15,1,0\.00,None$/m);
+  assert.match(csvOutput, /^bad,.*:2:1:16,null \(niepełna analiza\),0\.00,None$/m);
   const diagnosticOutput = diagnosticText(report);
   assert.match(diagnosticOutput, /GLOBAL/);
   assert.match(diagnosticOutput, /PARTIAL/);
@@ -82,13 +82,16 @@ test('E08 manual AggregateResult keeps complete and partial owners across render
     const csvNames = filteredCsv.split('\n').slice(4).filter(Boolean).map(line => line.split(',')[0]);
     assert.deepEqual(csvNames, expectedNames);
     const filteredTable = markdown(filtered.report, filtered.selected, result);
+    assert.equal(filteredTable.split('\n')[2],
+      `Files: 1 · Functions: ${expectedNames.length} of 2 · Function discovery: incomplete · Analysis errors`);
+    assert.doesNotMatch(filteredTable, /## Diagnostics|PARTIAL/);
     for (const name of ['ok', 'bad']) {
       assert.equal(filteredTable.includes(`| ${name} |`), expectedNames.includes(name));
     }
     const filteredExplain = markdown(filtered.report, filtered.selected, result, true);
     assert.match(filteredExplain, /PARTIAL/);
     if (filter === 'bad') {
-      assert.match(filteredCsv, /^bad,.*:2:1:16,null,0,0,0,0,0,$/m);
+      assert.match(filteredCsv, /^bad,.*:2:1:16,null \(niepełna analiza\),0\.00,None$/m);
       assert.match(filteredExplain, /Cognitive: null \(niepełna analiza\)/); assert.match(filteredExplain, /function bad\(\)\{\} +\| +\+2 +\|/);
     }
     assert.match(diagnosticText(filtered.report), /GLOBAL/);

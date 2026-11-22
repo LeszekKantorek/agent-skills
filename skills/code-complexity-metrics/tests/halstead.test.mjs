@@ -202,7 +202,7 @@ test('diagnostic rows mask the occurrence anchor across functions and preserve o
   assert.ok(errors.length);
   assert.ok(errors.every(row => row.halstead.every(value => value === 0)));
   assert.deepEqual(makeReport(result, 'g').report.functions, [g]);
-  assert.match(csv(report), /g,input\.rs:6:1:\d+,0,2,1,1,1,1,\n/u);
+  assert.match(csv(report), /g,input\.rs:6:1:\d+,0,2\.00,None\n/u);
 });
 
 test('aggregation rejects out-of-range, unowned and altered Halstead occurrences', async () => {

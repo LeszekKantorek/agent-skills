@@ -154,8 +154,7 @@ async function attachProjectGraph(reportAggregate, reportResults, reportFiles, c
   const reportsByFile = new Map(reportResults.map(result => [result.fileId, result]));
   const reportsByPath = new Map(reportResults.map(result => [normalized(result.fileId), result]));
   const filesByPath = new Map(), graphById = new Map(), reportGraphFiles = new Map();
-  const projectFiles = [], reasons = new Set();
-  let unresolvedCalls = 0;
+  const projectFiles = [];
   for (const {files, errors} of projects) {
     const projectResults = [];
     for (const file of files) {
@@ -169,8 +168,6 @@ async function attachProjectGraph(reportAggregate, reportResults, reportFiles, c
     const project = aggregate(projectResults, graphDiagnostics);
     buildCallGraph(project, projectResults);
     for (const record of project.functions) graphById.set(record.id, record.callGraph);
-    unresolvedCalls += project.callGraph.unresolved_calls;
-    for (const reason of project.callGraph.reasons) reasons.add(reason);
   }
   for (const {fileId} of reportAggregate.functions) {
     if (reportGraphFiles.has(fileId)) continue;
@@ -193,8 +190,6 @@ async function attachProjectGraph(reportAggregate, reportResults, reportFiles, c
     const [, ordinal] = JSON.parse(record.id);
     record.callGraph = graphById.get(outerId(graphFile, ordinal));
   }
-  reportAggregate.callGraph = {scope: 'project_files', complete: reasons.size === 0,
-    unresolved_calls: unresolvedCalls, reasons: [...reasons].sort()};
   return projectFiles;
 }
 

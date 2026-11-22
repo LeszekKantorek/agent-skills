@@ -1,6 +1,6 @@
 # JavaScript metric rules
 
-Rules version: **2.2**.
+Rules version: **2.5**.
 
 The [generic metric rules](generic-metric-rules.md) define shared scoring, ownership, and table notation. This document specifies JavaScript syntax mappings and exceptions.
 
@@ -94,4 +94,8 @@ For `const total = price + 2; return send(total);`, the five operators are `cons
 
 Use the [shared call graph rules](generic-metric-rules.md#call-graph). The analyzer follows local, statically bound functions and direct closure calls. It uses lexical scope and respects shadowing by parameters and declarations. It follows relative ESM imports, including aliases, namespace imports, and explicit re-exports, within the analyzed projects.
 
-Calls through mutable bindings, arbitrary object properties, or callbacks remain unresolved when the target cannot be established. The graph also reports imports that point outside the analyzed files.
+A `const` or `let` initialized directly with a function can resolve to that definition. If the analyzer finds a write to the `let` binding, its calls remain unresolved.
+
+A class reference can resolve to one of its own public static methods through dot access or a literal string key. The analyzer follows simple class aliases and indexed imports. Property writes, conflicting definitions, or unknown computed static names can make a method unresolved. The analyzer also accounts for direct `eval` and class values passed to calls, written by assignments, or returned from functions. The index covers direct uses of class values. Tracking class values through arbitrary objects and collections requires additional analysis, as does resolving inherited methods.
+
+Caller entries use `Worker.run` for a static method and `Worker.prototype.run` for an instance method. Calls through arbitrary object properties or callbacks remain unresolved when the target cannot be established. The graph also reports imports that point outside the analyzed files.

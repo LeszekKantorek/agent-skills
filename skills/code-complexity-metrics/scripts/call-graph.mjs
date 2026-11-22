@@ -1,8 +1,10 @@
 import {realpathSync, statSync} from 'node:fs';
 import path from 'node:path';
 import {languageFor} from './input-files.mjs';
+import {CallGraphReason as Reason} from './call-graph-reasons.mjs';
 import {javascriptCalls} from './analyzers/javascript/call-graph.mjs';
 import {rustCalls} from './analyzers/rust/call-graph.mjs';
+import {spelling} from './analyzers/call-graph-syntax.mjs';
 
 function canonical(file) {
   return process.platform === 'win32' ? file.toLowerCase() : file;
@@ -79,10 +81,12 @@ function indexDiagnostics(diagnostics) {
   }
   return {
     rowDamaged: (fileId, node) => rows.get(fileId)?.has(node.startPosition.row) ?? false,
-    definitionDamaged({fileId, node, anchor}) {
+    definitionDamaged({fileId, node, anchor, kind}) {
       const start = anchor?.startIndex ?? node.startIndex;
       const end = anchor?.endIndex ?? start + 1;
-      return byFile.get(fileId)?.some(({range, owner}) => {
+      return byFile.get(fileId)?.some(({range, owner, category}) => {
+        // A written macro path can be scored even when its argument syntax is opaque.
+        if (kind === 'macro' && category !== 'parse') return false;
         if (!range) return owner === null;
         const point = range.startIndex === range.endIndex;
         return range.startIndex < end && (point ? range.endIndex >= start : range.endIndex > start);
@@ -95,7 +99,7 @@ function indexDiagnostics(diagnostics) {
 function coverage(sites, analysisGap) {
   const occurrences = new Set();
   const reasons = new Set();
-  if (analysisGap) reasons.add('analysis-gap');
+  if (analysisGap) reasons.add(Reason.analysisGap);
   for (const site of sites) {
     occurrences.add(JSON.stringify([site.fileId, site.node.startIndex, site.node.endIndex]));
     reasons.add(site.reason);
@@ -108,6 +112,17 @@ function append(map, key, value) {
   map.get(key).push(value);
 }
 
+function fanOutContributions(sites) {
+  const destinations = new Set(), byRow = new Map();
+  for (const {fanOutKey, node} of sites) {
+    if (!fanOutKey || destinations.has(fanOutKey)) continue;
+    destinations.add(fanOutKey);
+    const row = node.startPosition.row + 1;
+    byRow.set(row, (byRow.get(row) ?? 0) + 1);
+  }
+  return {total: destinations.size, byRow};
+}
+
 export function buildCallGraph(aggregate, results, scope = 'input_files') {
   const {files, probe} = indexFiles(aggregate, results);
   const diagnostics = indexDiagnostics(aggregate.diagnostics);
@@ -117,17 +132,23 @@ export function buildCallGraph(aggregate, results, scope = 'input_files') {
   ].sort(compareSites);
   const outerNodes = new Map(files.flatMap(file => file.analysis.functions.map(({id, root}) => [id, root])));
   const unresolved = [], outgoing = new Map(), incoming = new Map(), potential = new Map();
-  for (const {file, node, caller, resolution} of calls) {
+  for (const {file, node, caller, callee, resolution, writtenPath} of calls) {
     const owner = file.analysis.ownerByNode.get(node);
     let {target = null, reason = null, mayTargetInput = false} = resolution;
-    if (diagnostics.rowDamaged(file.fileId, node) || (target && diagnostics.definitionDamaged(target))) {
+    const callDamaged = target?.kind !== 'macro' && diagnostics.rowDamaged(file.fileId, node);
+    if (callDamaged || (target && diagnostics.definitionDamaged(target))) {
       target = null;
-      reason = 'analysis-gap';
+      reason = Reason.analysisGap;
       mayTargetInput = true;
     }
     if (reason) target = null;
     const excluded = target && target.id === caller?.id ? 'self-recursion' : null;
-    const site = {fileId: file.fileId, node, caller, target, reason, excluded};
+    let fanOutKey = excluded ? null : target?.id;
+    if (writtenPath && reason !== Reason.analysisGap) {
+      fanOutKey = JSON.stringify([file.language, 'written-call', writtenPath]);
+    }
+    const site = {fileId: file.fileId, node, caller, target, reason, excluded, fanOutKey,
+      calleeText: reason ? spelling(file, callee) : null};
     if (owner !== null) append(outgoing, owner, site);
     if (reason) {
       unresolved.push(site);
@@ -141,13 +162,19 @@ export function buildCallGraph(aggregate, results, scope = 'input_files') {
   for (const record of aggregate.functions) {
     const edgesOut = outgoing.get(record.id) ?? [];
     const edgesIn = incoming.get(record.id) ?? [];
-    const fanIn = new Set(edgesIn.map(edge => edge.caller.id)).size;
-    const fanOut = new Set(edgesOut.filter(edge => edge.target && !edge.excluded).map(edge => edge.target.id)).size;
+    const callerSites = new Map();
+    for (const site of edgesIn) {
+      if (!callerSites.has(site.caller.id)) callerSites.set(site.caller.id, site);
+    }
+    const fanIn = callerSites.size;
+    const {total: fanOut, byRow: fanOutByRow} = fanOutContributions(edgesOut);
     const language = languageFor(record.fileId);
     record.callGraph = {
       metrics: {fan_in: fanIn, fan_out: fanOut, instability: fanIn + fanOut === 0 ? null : fanOut / (fanIn + fanOut)},
       fan_in: incomingCoverage.get(language),
       fan_out: coverage(edgesOut.filter(edge => edge.reason), Boolean(record.error)),
+      fanOutByRow,
+      callerSites: [...callerSites.values()],
       outgoing: edgesOut,
       incoming: edgesIn,
     };

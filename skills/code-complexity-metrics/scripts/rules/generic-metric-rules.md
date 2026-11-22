@@ -1,6 +1,6 @@
 # Generic metric rules
 
-Rules version: **2.2**.
+Rules version: **2.5**.
 
 The shared rules and the relevant language document form one scoring profile:
 
@@ -200,7 +200,7 @@ The classification follows written syntax. It ignores structural punctuation and
 
 Use the same operator key for shared roles such as `call`, `index`, and `member_access`. For a method call such as `obj.run()`, access to the method and invocation are distinct operations. The enclosing parentheses add no occurrence.
 
-JSON and CSV retain the numeric result. Markdown displays Volume to two decimal places.
+JSON retains the numeric result. CSV and Markdown display Volume to two decimal places.
 
 `--explain` gives one Volume for the outer. The fragment column shows source lines. The five columns beside it show the Cognitive increment and additions to `N1`, `N2`, `eta1`, and `eta2`. Each distinct item increases `eta1` or `eta2` on its first retained source line.
 
@@ -208,16 +208,22 @@ Adding the line values recovers the function totals. A dash marks an unavailable
 
 ## Call graph
 
-The analyzer indexes Rust and JavaScript declarations in each project containing a report file. Files selected by `--path` and functions selected by `--filter` limit the report. The surrounding source contributes callers and targets to the graph. A function identity includes its declaration location and language context. Aliases of a declaration resolve to the same identity. Calls that have multiple possible targets or lack a known target remain unresolved.
+The analyzer builds a separate graph for each project containing a report file. Files selected by `--path` and functions selected by `--filter` limit the report. Surrounding project sources contribute callers and targets to the graph. A function identity includes its declaration location and language context. File aliases resolve through the same physical declaration. Calls with multiple possible targets or an unknown target remain unresolved.
+
+An explicitly selected file under `node_modules` or a Cargo build directory gets a graph limited to that file.
 
 | Metric | Calculation |
 | --- | --- |
 | Fan-In | Count distinct functions that call the reported outer. Use the nearest caller, so two separate closures can count as two callers. |
-| Fan-Out | Count distinct targets called from the outer and its nested functions. A local closure can be a target. |
-| Instability | Divide Fan-Out by Fan-In plus Fan-Out. Use `null` when both are zero. |
+| Fan-Out | Count distinct destinations from the outer and its nested functions. Use the resolved definition when available. Otherwise use a named path visible in the source. Include local closures and Rust macro paths. |
+| Instability | Divide Fan-Out by Fan-In plus Fan-Out. Report `NaN` when both are zero. |
 
 An edge from a function to itself adds no point. A call from file scope adds no Fan-In. Repeated calls to the same target contribute once in Fan-Out. Repeated calls from the same caller contribute once in Fan-In.
 
-Coverage describes the analyzed projects. An unresolved call inside an outer makes its Fan-Out partial. An unresolved call that could target an indexed definition can make Fan-In partial for the same language. Missing analysis can also make either direction partial. The counts use confirmed edges, and Instability inherits the directions' coverage. Diagnostics in files used only for the graph affect coverage. Report diagnostics describe the files selected for the report.
+Report diagnostics describe the files selected for the report.
 
-`--explain` shows the three graph metrics for each selected outer. It displays `NaN` for Instability when both counts are zero. The source table shows local metric increments. Use the JSON report to inspect graph coverage.
+Resolvers use the [shared reason codes](../call-graph-reasons.mjs). Use `dynamic-member` for a call through a member with an unknown target. Use `dynamic-value` when the analyzer cannot identify the target from the bound value. Use `external-module` for calls through an external JavaScript module or Rust crate. Language-specific codes such as `trait-dispatch` and `computed-member` identify distinct resolution cases.
+
+JSON retains numeric Instability without rounding. CSV, Markdown, and `--explain` display it to two decimal places. For undefined Instability, JSON uses the string `"NaN"`. Other formats display `NaN`.
+
+JSON and `--explain` list each distinct caller counted in Fan-In with the location of its first call. They also list unresolved outgoing calls with their locations, written targets, and reasons. The `--explain` source table credits each Fan-Out destination to its first contributing line.

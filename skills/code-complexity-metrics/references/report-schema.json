@@ -3,20 +3,40 @@
   "title": "Code Complexity Metrics report",
   "type": "object",
   "$defs": {
-    "coverage": {
+    "sourceLocation": {
+      "type": "string",
+      "pattern": "^(?:[^\\\\\\x00-\\x1F\\x7F-\\x9F\\u2028\\u2029]|\\\\\\\\|\\\\[rnt]|\\\\u(?:00(?:0[0-8BCEF]|1[0-9A-F]|7F|8[0-9A-F]|9[0-9A-F])|202[89]))+:[1-9][0-9]*:[1-9][0-9]*:[0-9]+(?![\\s\\S])"
+    },
+    "fanOutDetails": {
       "type": "object",
       "properties": {
-        "complete": {"type": "boolean"},
-        "unresolved_calls": {"type": "integer", "minimum": 0},
-        "reasons": {"type": "array", "items": {"type": "string"}}
+        "unresolved_count": {"type": "integer", "minimum": 0},
+        "unresolved_calls": {
+          "type": "array",
+          "description": "Unresolved outgoing calls with their source positions and resolution reasons.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "type": "string",
+                "description": "Call position as file:line:column in UTF-16 units.",
+                "pattern": "^(?:[^\\\\\\x00-\\x1F\\x7F-\\x9F\\u2028\\u2029]|\\\\\\\\|\\\\[rnt]|\\\\u(?:00(?:0[0-8BCEF]|1[0-9A-F]|7F|8[0-9A-F]|9[0-9A-F])|202[89]))+:[1-9][0-9]*:[1-9][0-9]*(?![\\s\\S])"
+              },
+              "call": {"type": ["string", "null"]},
+              "reasons": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+            },
+            "required": ["location", "call", "reasons"],
+            "additionalProperties": false
+          }
+        }
       },
-      "required": ["complete", "unresolved_calls", "reasons"],
+      "required": ["unresolved_count", "unresolved_calls"],
       "additionalProperties": false
     }
   },
   "properties": {
     "version": {
-      "const": "2.0.0-dev.3"
+      "const": "20261122.0.0"
     },
     "summary": {
       "type": "object",
@@ -38,17 +58,6 @@
         },
         "has_errors": {
           "type": "boolean"
-        },
-        "call_graph": {
-          "type": "object",
-          "properties": {
-            "scope": {"const": "project_files"},
-            "complete": {"type": "boolean"},
-            "unresolved_calls": {"type": "integer", "minimum": 0},
-            "reasons": {"type": "array", "items": {"type": "string"}}
-          },
-          "required": ["scope", "complete", "unresolved_calls", "reasons"],
-          "additionalProperties": false
         }
       },
       "required": [
@@ -56,8 +65,7 @@
         "functions_found",
         "functions_presented",
         "function_discovery_complete",
-        "has_errors",
-        "call_graph"
+        "has_errors"
       ],
       "additionalProperties": false
     },
@@ -97,10 +105,7 @@
               "null"
             ]
           },
-          "location": {
-            "type": "string",
-            "pattern": "^(?:[^\\\\\\x00-\\x1F\\x7F-\\x9F\\u2028\\u2029]|\\\\\\\\|\\\\[rnt]|\\\\u(?:00(?:0[0-8BCEF]|1[0-9A-F]|7F|8[0-9A-F]|9[0-9A-F])|202[89]))+:[1-9][0-9]*:[1-9][0-9]*:[0-9]+(?![\\s\\S])"
-          },
+          "location": {"$ref": "#/$defs/sourceLocation"},
           "metrics": {
             "type": "object",
             "properties": {
@@ -114,16 +119,20 @@
               },
               "fan_in": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "description": "Distinct confirmed functions that call this outer."
               },
               "fan_out": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "description": "Distinct call destinations of this outer and its nested functions. Includes written paths when the target definition cannot be resolved."
               },
               "instability": {
-                "type": ["number", "null"],
-                "minimum": 0,
-                "maximum": 1
+                "anyOf": [
+                  {"type": "number", "minimum": 0, "maximum": 1},
+                  {"const": "NaN"}
+                ],
+                "description": "Fan-Out divided by Fan-In plus Fan-Out. The string NaN when both counts are zero."
               }
             },
             "required": [
@@ -170,8 +179,28 @@
           "call_graph": {
             "type": "object",
             "properties": {
-              "fan_in": {"$ref": "#/$defs/coverage"},
-              "fan_out": {"$ref": "#/$defs/coverage"}
+              "fan_in": {
+                "type": "object",
+                "properties": {
+                  "callers_count": {"type": "integer", "minimum": 0},
+                  "callers": {
+                    "type": "array",
+                    "description": "One entry per distinct confirmed caller. The location identifies its first call site.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {"type": "string"},
+                        "location": {"$ref": "#/$defs/sourceLocation"}
+                      },
+                      "required": ["name", "location"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["callers_count", "callers"],
+                "additionalProperties": false
+              },
+              "fan_out": {"$ref": "#/$defs/fanOutDetails"}
             },
             "required": ["fan_in", "fan_out"],
             "additionalProperties": false

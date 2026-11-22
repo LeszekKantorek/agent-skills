@@ -38,16 +38,17 @@ function valid(fragment, v) {
   }
   return true;
 }
-const completeCoverage = {complete: true, unresolved_calls: 0, reasons: []};
 const complete = {
-  version: '2.0.0-dev.3',
+  version: '20261122.0.0',
   summary: {files: 1, functions_found: 1, functions_presented: 1, function_discovery_complete: true,
-    has_errors: false, call_graph: {scope: 'project_files', ...completeCoverage}},
+    has_errors: false},
   files: [{fileId: '/x.js', analyzed: true, functionDiscoveryComplete: true}],
   functions: [{name: 'f', location: 'x.js:1:1:2',
-    metrics: {cognitive_complexity: 0, halstead_volume: 0, fan_in: 0, fan_out: 0, instability: null},
+    metrics: {cognitive_complexity: 0, halstead_volume: 0, fan_in: 1, fan_out: 1, instability: 0.5},
     halstead_counts: {n1: 0, n2: 0, eta1: 0, eta2: 0},
-    call_graph: {fan_in: {...completeCoverage}, fan_out: {...completeCoverage}}, error: null}],
+    call_graph: {fan_in: {callers_count: 1, callers: [{name: 'useF', location: 'caller.js:2:4:3'}]},
+      fan_out: {unresolved_count: 1,
+        unresolved_calls: [{location: 'x.js:1:2', call: 'receiver.run', reasons: ['dynamic-member']}]}}, error: null}],
   diagnostics: [{error: 'X: x', name: 'f', location: 'x.js:1:1:2'}],
 };
 test('schema closes all report objects and validates required fields and types', () => {
@@ -70,7 +71,7 @@ test('schema closes all report objects and validates required fields and types',
     const copy = structuredClone(complete); let parent = copy; for (const part of parts) parent = parent[part]; parent.extra = true;
     assert.equal(valid(schema, copy), false, `extra ${parts.join('.')}`);
   }
-  check(schema, complete, []); assert.equal(count, 44);
+  check(schema, complete, []); assert.equal(count, 42);
   for (const location of [':1:1:2', 'x:0:1:2', 'x:1:0:2', 'x:1:1:-1', 'x:1:1:null', 'x:1:1:2\n', 'x:1:1:2\r', 'x:1:1:2\u2028', 'x:1:1:2\u2029']) { const r = structuredClone(complete); r.functions[0].location = location; assert.equal(valid(schema, r), false, location); }
   for (const location of ['x:0:1:2', 'x:1:0:2', 'x:0:0:-1', 'x:1:1:null', ':0:0:null', 'x:0:0:null\n', 'x:0:0:1\r']) { const r = structuredClone(complete); r.diagnostics[0].location = location; assert.equal(valid(schema, r), false, location); }
   for (const location of ['x:0:0:0', 'x:0:0:null']) { const r = structuredClone(complete); r.diagnostics[0] = { error: 'X', name: null, location }; assert.ok(valid(schema, r), location); r.diagnostics[0].name = 'f'; assert.equal(valid(schema, r), false, location); }
@@ -80,8 +81,9 @@ test('schema closes all report objects and validates required fields and types',
   for (const fileId of [String.raw`/x\ny`, String.raw`/x\\ny`, String.raw`/x\u0085`]) { const r = structuredClone(complete); r.files[0].fileId = fileId; assert.ok(valid(schema, r), fileId); }
   for (const location of ['x\ny:1:1:2', String.raw`x\q:1:1:2`]) { const r = structuredClone(complete); r.functions[0].location = location; assert.equal(valid(schema, r), false, location); }
   const relative = structuredClone(complete); relative.files[0].fileId = 'x.js'; assert.equal(valid(schema, relative), false);
-  const invalidInstability = structuredClone(complete); invalidInstability.functions[0].metrics.instability = 1.5;
-  assert.equal(valid(schema, invalidInstability), false);
+  const instabilitySchema = schema.properties.functions.items.properties.metrics.properties.instability;
+  for (const value of [0, 0.5, 1, 'NaN']) assert.ok(valid(instabilitySchema, value));
+  for (const value of [null, -0.5, 1.5, '0.5']) assert.equal(valid(instabilitySchema, value), false);
   for (const mutate of [r => { r.version = ''; }, r => { r.summary.files = -1; }, r => { r.functions[0].metrics.cognitive_complexity = -1; }, r => { r.functions[0].metrics.halstead_volume = -1; }, r => { r.functions[0].halstead_counts.n1 = 0.5; }, r => { r.functions[0].metrics.statement_count = 1; }, r => { r.functions[0].metrics.cyclomatic_complexity = 1; }]) { const r = structuredClone(complete); mutate(r); assert.equal(valid(schema, r), false); }
 });
 test('CLI uses module package version in all formats independently of cwd', async () => {
@@ -91,14 +93,17 @@ test('CLI uses module package version in all formats independently of cwd', asyn
     await writeFile(path.join(dir, 'good.js'), 'function f(){if(x){work();}}');
     await writeFile(path.join(dir, 'partial.rs'), 'fn f(){unknown!(a; => b);}');
     const cli = fileURLToPath(new URL('../scripts/measure.mjs', import.meta.url));
-    assert.equal(pkg.version, '2.0.0-dev.3'); assert.equal(lock.version, pkg.version); assert.equal(lock.packages[''].version, pkg.version);
+    assert.equal(pkg.version, '20261122.0.0'); assert.equal(lock.version, pkg.version); assert.equal(lock.packages[''].version, pkg.version);
     for (const args of [[], ['--path', 'good.js'], ['--path', 'partial.rs']]) {
       const result = spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8' });
       assert.ok(result.stdout, result.stderr); const report = JSON.parse(result.stdout); assert.ok(valid(schema, report), args.join(' ')); assert.equal(report.version, pkg.version);
     }
     for (const args of [['--path', 'good.js', '--format', 'markdown'], ['--path', 'good.js', '--format', 'csv'], ['--path', 'good.js', '--explain']]) {
       const result = spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8' });
-      assert.equal(result.status, 0, result.stderr); assert.equal((result.stdout.match(/Version: 2\.0\.0-dev\.3/g) ?? []).length, 1); assert.ok(!result.stdout.includes('9.8.7'));
+      assert.equal(result.status, 0, result.stderr);
+      const versionLine = args.includes('csv') ? '# Version: 20261122.0.0' : 'Version: 20261122.0.0';
+      assert.deepEqual(result.stdout.split('\n').filter(line => /^(?:# )?Version: /.test(line)), [versionLine]);
+      assert.ok(!result.stdout.includes('9.8.7'));
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
@@ -118,13 +123,13 @@ test('all formats read a changed version from an isolated package', async () => 
     const report = JSON.parse(run([])); assert.equal(valid(schema, report), false); assert.equal(report.version, '7.11.13');
     assert.deepEqual(Object.keys(report), ['version', 'summary', 'files', 'functions', 'diagnostics']);
     const summary = 'Files: 1; functions found: 1; functions presented: 1; function discovery complete: true; has errors: false';
-    const withGraph = summary + '; call graph scope: project_files; call graph complete: true; unresolved calls: 0';
+    const compact = 'Files: 1 · Functions: 1';
     for (const args of [['--format', 'markdown'], ['--explain']]) {
       const lines = run(args).split('\n');
-      const metadata = args.includes('--explain') ? summary : withGraph;
+      const metadata = args.includes('--explain') ? summary : compact;
       assert.deepEqual(lines.slice(0, 6), ['# Code Complexity Metrics', '', metadata, '', 'Version: 7.11.13', '']);
     }
     const lines = run(['--format', 'csv']).split('\n');
-    assert.deepEqual(lines.slice(0, 4), ['# Code Complexity Metrics', `# ${withGraph}`, '# Version: 7.11.13', 'Name,Location,Cognitive,Halstead Volume,N1,N2,Eta1,Eta2,Fan-In,Fan-Out,Instability,Fan-In complete,Fan-Out complete,Unresolved in,Unresolved out,Error']);
+    assert.deepEqual(lines.slice(0, 4), ['# Code Complexity Metrics', `# ${compact}`, '# Version: 7.11.13', 'Name,Location,Cognitive,Halstead Volume,Fan-In,Fan-Out,Instability,Error']);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

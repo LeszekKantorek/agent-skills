@@ -1,9 +1,11 @@
 import path from 'node:path';
+import {CallGraphReason as Reason} from '../../call-graph-reasons.mjs';
 import {addBinding, definition, field, named, resolved, spelling, unresolved, unwrapParentheses} from '../call-graph-syntax.mjs';
 
 const ordinaryTypes = new Set(['struct_item', 'enum_item', 'union_item', 'trait_item']);
 const conditionalAttributes = new Set(['cfg', 'cfg_attr']);
-const lexicalBindings = new Set(['local-value', 'parameter', 'generic-type', 'closure-binding', 'mutable-binding']);
+const localValueKind = 'local-value';
+const lexicalBindings = new Set([localValueKind, Reason.parameter, Reason.genericType, 'closure-binding', Reason.mutableBinding]);
 const ignoredNodes = new Set(['attribute_item', 'inner_attribute_item', 'macro_definition', 'token_tree']);
 const identifierNodes = new Set(['identifier', 'type_identifier', 'self', 'super', 'crate', 'primitive_type']);
 const nameOf = (file, node) => spelling(file, node)?.replace(/^r#/, '');
@@ -34,6 +36,31 @@ function segments(file, node) {
   }
   if (node.type === 'bracketed_type') return segments(file, named(node)[0]);
   return null;
+}
+
+function typePathTokens(file, node) {
+  if (node.type === 'line_comment' || node.type === 'block_comment') return [];
+  if (!node.children.length) return [spelling(file, node)];
+  return node.children.flatMap(child => typePathTokens(file, child));
+}
+
+function writtenPath(file, expression) {
+  const node = unwrapParentheses(expression);
+  if (!node) return null;
+  if (node.type === 'generic_function') return writtenPath(file, field(node, 'function'));
+  if (node.type === 'field_expression') {
+    const receiver = writtenPath(file, field(node, 'value'));
+    const member = nameOf(file, field(node, 'field'));
+    return receiver && member ? [...receiver, ['member', member]] : null;
+  }
+  if (node.type === 'scoped_identifier') {
+    const qualifier = field(node, 'path');
+    const prefix = qualifier ? writtenPath(file, qualifier) : [''];
+    const name = nameOf(file, field(node, 'name'));
+    return prefix && name ? [...prefix, name] : null;
+  }
+  if (['bracketed_type', 'generic_type'].includes(node.type)) return [['type', ...typePathTokens(file, node)]];
+  return segments(file, node);
 }
 
 function* imports(file, node, prefix = []) {
@@ -107,7 +134,7 @@ function candidates(current, name, mode, onlyHere = false) {
       (binding.namespace === mode || mode === 'any' || binding.namespace === 'both') &&
       !(skipLocals && lexicalBindings.has(binding.kind)));
     if (choices.length) return choices;
-    if (at.wildcard) return [{kind: 'unresolved-glob-import'}];
+    if (at.wildcard) return [{kind: Reason.unresolvedGlobImport}];
     skipLocals ||= at.itemBoundary;
   }
   return [];
@@ -122,13 +149,13 @@ function inheritedSelf(current) {
 }
 
 function resolvePath(current, parts, mode, visited) {
-  if (!parts?.length) return unresolved('unsupported-qualified-path');
+  if (!parts?.length) return unresolved(Reason.unsupportedQualifiedPath);
   const module = current.module;
   let entity;
   let start = 1;
   const [first] = parts;
-  if (first === '') return unresolved('external-crate', false);
-  if (first === 'crate') entity = module.root ? {module: module.root} : unresolved('unknown-crate-root');
+  if (first === '') return unresolved(Reason.externalModule, false);
+  if (first === 'crate') entity = module.root ? {module: module.root} : unresolved(Reason.unknownCrateRoot);
   else if (first === 'self') entity = {module};
   else if (first === 'super') {
     let parent = module.parent;
@@ -136,10 +163,10 @@ function resolvePath(current, parts, mode, visited) {
       parent = parent?.parent;
       start++;
     }
-    entity = parent ? {module: parent} : unresolved('unknown-parent-module');
+    entity = parent ? {module: parent} : unresolved(Reason.unknownParentModule);
   } else if (first === 'Self') {
     const impl = inheritedSelf(current);
-    entity = impl?.entity ?? unresolved('unresolved-self-type');
+    entity = impl?.entity ?? unresolved(Reason.unresolvedSelfType);
   } else {
     entity = resolveName(current, first, parts.length === 1 ? mode : 'type', visited);
   }
@@ -149,49 +176,58 @@ function resolvePath(current, parts, mode, visited) {
     if (entity.module) entity = resolveName(entity.module.scope, name, namespace, visited, true);
     else if (entity.type) {
       const methods = entity.type.methods.get(name) ?? [];
-      if (namespace === 'type' || !methods.length) entity = unresolved('unresolved-associated-item');
-      else if (methods.length > 1) entity = unresolved('ambiguous-inherent-method');
+      if (namespace === 'type' || !methods.length) entity = unresolved(Reason.unresolvedAssociatedItem);
+      else if (methods.length > 1) entity = unresolved(Reason.ambiguousInherentMethod);
       else if (methods[0].reason) entity = unresolved(methods[0].reason);
       else entity = resolved(methods[0].target);
-    } else entity = unresolved('unsupported-qualified-path');
+    } else entity = unresolved(Reason.unsupportedQualifiedPath);
   }
   return entity;
 }
 
 function resolveName(current, name, mode, visited, onlyHere = false) {
   const found = candidates(current, name, mode, onlyHere);
-  if (found.length > 1) return unresolved(found.some(binding => binding.conditional) ? 'conditional-cfg' : 'ambiguous-binding');
-  if (!found.length) return onlyHere ? unresolved('unindexed-item', false) : unresolved('unbound-name');
+  if (found.length > 1) return unresolved(found.some(binding => binding.conditional) ? Reason.conditionalCfg : Reason.ambiguousBinding);
+  if (!found.length) return onlyHere ? unresolved(Reason.unindexedItem, false) : unresolved(Reason.unboundName);
   const binding = found[0];
-  if (binding.conditional) return unresolved('conditional-cfg');
+  if (binding.conditional) return unresolved(Reason.conditionalCfg);
   if (binding.kind === 'function' || binding.kind === 'closure-binding') return resolved(binding.target);
   if (binding.kind === 'module') return {module: binding.module};
   if (binding.kind === 'type') return {type: binding};
   if (binding.kind === 'import' || binding.kind === 'type-alias') {
-    if (visited.has(binding)) return unresolved('cyclic-import');
+    if (visited.has(binding)) return unresolved(Reason.cyclicImport);
     visited.add(binding);
     const result = resolvePath(binding.current, binding.parts, binding.kind === 'type-alias' ? 'type' : mode, visited);
     visited.delete(binding);
     return result;
   }
-  return unresolved(binding.kind, !['external-crate', 'extern-function'].includes(binding.kind));
+  const reason = binding.kind === localValueKind ? Reason.dynamicValue : binding.kind;
+  return unresolved(reason, reason !== Reason.externalModule && reason !== Reason.externFunction);
 }
 
 function resolveCallee(file, current, expression, definitions) {
   let node = unwrapParentheses(expression);
   if (node?.type === 'generic_function') node = field(node, 'function');
-  if (!node) return unresolved('missing-callee');
+  if (!node) return unresolved(Reason.missingCallee);
   if (node.type === 'closure_expression') return resolved(definitions.get(node));
-  if (node.type === 'field_expression') return unresolved('dynamic-method');
+  if (node.type === 'field_expression') return unresolved(Reason.dynamicMember);
   if (node.type === 'scoped_identifier') {
     const qualifier = field(node, 'path');
-    if (qualifier?.type === 'generic_type') return unresolved('generic-dispatch');
-    if (qualifier?.type === 'bracketed_type' && named(qualifier)[0]?.type === 'qualified_type') return unresolved('trait-dispatch');
+    if (qualifier?.type === 'generic_type') return unresolved(Reason.genericDispatch);
+    if (qualifier?.type === 'bracketed_type' && named(qualifier)[0]?.type === 'qualified_type') return unresolved(Reason.traitDispatch);
   }
   const parts = segments(file, node);
-  if (!parts) return unresolved('dynamic-callee');
+  if (!parts) return unresolved(Reason.dynamicCallee);
   const found = resolvePath(current, parts, 'value', new Set());
-  return found.target || found.reason ? found : unresolved('non-function-item', false);
+  return found.target || found.reason ? found : unresolved(Reason.nonFunctionItem, false);
+}
+
+function macroDependency(file, node) {
+  const anchor = field(node, 'macro');
+  const macroPath = segments(file, anchor)?.join('::');
+  if (!macroPath) return null;
+  return {id: JSON.stringify(['rust-macro', macroPath]), label: `${macroPath}!`,
+    kind: 'macro', fileId: file.fileId, node, anchor, owner: null};
 }
 
 function indexRust(files, probe) {
@@ -222,25 +258,25 @@ function indexRust(files, probe) {
     const body = field(node, 'body');
     const configured = modulePath(file, attributes);
     const context = [...parent.context, name, node.startIndex];
-    if (configured === null) return {kind: 'unsupported-module-path'};
+    if (configured === null) return {kind: Reason.unsupportedModulePath};
     if (body) {
       const directory = configured === undefined ? path.join(parent.directory, name) : path.resolve(parent.directory, configured);
       const module = moduleAt(file, body, parent, name, {directory, attributeDir: directory},
         false, parent.lineage, context, conditional);
       return {kind: 'module', module};
     }
-    if (!parent.root) return {kind: 'unknown-crate-root'};
-    if (current !== parent.scope && configured === undefined) return {kind: 'unsupported-block-module'};
+    if (!parent.root) return {kind: Reason.unknownCrateRoot};
+    if (current !== parent.scope && configured === undefined) return {kind: Reason.unsupportedBlockModule};
     // A conditional path attribute can replace the conventional layout.
-    if (attributes.some(attribute => nameOf(file, named(attribute)[0]) === 'cfg_attr')) return {kind: 'conditional-cfg'};
+    if (attributes.some(attribute => nameOf(file, named(attribute)[0]) === 'cfg_attr')) return {kind: Reason.conditionalCfg};
     const candidates = configured === undefined
       ? [path.join(parent.directory, name + '.rs'), path.join(parent.directory, name, 'mod.rs')]
       : [path.resolve(parent.attributeDir, configured)];
     const matches = candidates.map(candidate => ({candidate, ...probe(candidate, 'rust')})).filter(candidate => candidate.exists);
-    if (matches.length > 1) return {kind: 'ambiguous-module-file'};
+    if (matches.length > 1) return {kind: Reason.ambiguousModuleFile};
     const matched = matches[0];
-    if (!matched?.file) return {kind: 'module-outside-input'};
-    if (parent.lineage.has(matched.file.identity)) return {kind: 'cyclic-module'};
+    if (!matched?.file) return {kind: Reason.moduleOutsideInput};
+    if (parent.lineage.has(matched.file.identity)) return {kind: Reason.cyclicModule};
     const attributeDir = path.dirname(matched.candidate);
     const directory = configured !== undefined || path.basename(matched.candidate) === 'mod.rs'
       ? attributeDir : path.join(attributeDir, name);
@@ -278,25 +314,25 @@ function indexRust(files, probe) {
     } else if (node.type === 'type_item') {
       const parts = segments(file, field(node, 'type'));
       declare(name, parts && !field(node, 'type_parameters') ?
-        {kind: 'type-alias', current, parts} : {kind: 'generic-type-alias'}, 'type');
+        {kind: 'type-alias', current, parts} : {kind: Reason.genericTypeAlias}, 'type');
     } else if (node.type === 'extern_crate_declaration') {
-      declare(nameOf(file, field(node, 'alias')) ?? name, {kind: 'external-crate'}, 'both');
+      declare(nameOf(file, field(node, 'alias')) ?? name, {kind: Reason.externalModule}, 'both');
     } else if (node.type === 'foreign_mod_item') {
       const body = field(node, 'body');
       if (body) for (const item of entries(body)) {
         if (['function_signature_item', 'static_item'].includes(item.node.type)) {
-          declare(nameOf(file, field(item.node, 'name')), {kind: 'extern-function'}, 'value');
+          declare(nameOf(file, field(item.node, 'name')), {kind: Reason.externFunction}, 'value');
         }
       }
     } else if (node.type === 'const_item' || node.type === 'static_item') {
       const value = unwrapParentheses(field(node, 'value'));
       const closure = value?.type === 'closure_expression' && !node.children.some(child => child.type === 'mutable_specifier');
       declare(name, closure ? {kind: 'function', target: fnDefinition(current, value, definitions, name)} :
-        {kind: 'dynamic-value'}, 'value');
+        {kind: Reason.dynamicValue}, 'value');
     }
   }
 
-  function bindPattern(current, pattern, kind = 'local-value', details = {}) {
+  function bindPattern(current, pattern, kind = localValueKind, details = {}) {
     const file = current.module.file;
     for (const name of patternNames(pattern)) {
       const local = nameOf(file, name);
@@ -309,7 +345,7 @@ function indexRust(files, probe) {
     if (!generic) return;
     for (const parameter of named(generic)) {
       addBinding(current.bindings, nameOf(current.module.file, field(parameter, 'name')),
-        {kind: 'generic-type', namespace: parameter.type === 'const_parameter' ? 'value' : 'type'});
+        {kind: Reason.genericType, namespace: parameter.type === 'const_parameter' ? 'value' : 'type'});
     }
   }
 
@@ -331,7 +367,7 @@ function indexRust(files, probe) {
         const target = localName && value?.type === 'closure_expression' ? fnDefinition(current, value, definitions, localName) : null;
         visit(node, current, caller, conditional, definitions);
         current = scope(current.module, current);
-        bindPattern(current, pattern, target ? 'closure-binding' : 'local-value', {target, conditional});
+        bindPattern(current, pattern, target ? 'closure-binding' : localValueKind, {target, conditional});
       } else visit(node, current, caller, conditional, definitions);
     }
   }
@@ -382,7 +418,7 @@ function indexRust(files, probe) {
       const fn = fnDefinition(current, node, definitions);
       const params = scope(current.module, current, {itemBoundary: node.type === 'function_item' && !impl, self: impl});
       bindGenerics(params, node);
-      bindPattern(params, field(node, 'parameters'), 'parameter');
+      bindPattern(params, field(node, 'parameters'), Reason.parameter);
       for (const child of named(node)) descend(child, params, fn);
     } else if (node.type === 'impl_item' || node.type === 'trait_item') {
       visitImpl(node, current, caller, conditional, definitions);
@@ -400,6 +436,9 @@ function indexRust(files, probe) {
     } else {
       if (node.type === 'call_expression') {
         calls.push({file, node, callee: field(node, 'function'), caller, current, conditional, definitions});
+      } else if (node.type === 'macro_invocation') {
+        const target = macroDependency(file, node);
+        if (target) calls.push({file, node, caller, callee: target.anchor, resolution: resolved(target)});
       } else if (['assignment_expression', 'compound_assignment_expr', 'compound_assignment_expression'].includes(node.type)) {
         writes.push({current, file, pattern: field(node, 'left')});
       } else if (node.type === 'reference_expression' && node.children.some(child => child.type === 'mutable_specifier')) {
@@ -414,19 +453,19 @@ function indexRust(files, probe) {
   for (const file of files) if (!indexed.has(file)) root(file, false);
   for (const {current, file, pattern} of writes) {
     for (const name of patternNames(pattern)) for (const binding of candidates(current, nameOf(file, name), 'value')) {
-      if (binding.kind === 'closure-binding') binding.kind = 'mutable-binding';
+      if (binding.kind === 'closure-binding') binding.kind = Reason.mutableBinding;
     }
   }
   for (const impl of impls) {
-    if (impl.trait) impl.entity = unresolved('trait-dispatch');
-    else if (impl.conditional) impl.entity = unresolved('conditional-cfg');
-    else if (impl.generic) impl.entity = unresolved('generic-dispatch');
+    if (impl.trait) impl.entity = unresolved(Reason.traitDispatch);
+    else if (impl.conditional) impl.entity = unresolved(Reason.conditionalCfg);
+    else if (impl.generic) impl.entity = unresolved(Reason.genericDispatch);
     const entity = impl.parts && resolvePath(impl.current, impl.parts, 'type', new Set());
     if (!entity?.type) continue;
     impl.entity ??= entity;
     if (impl.trait) continue;
     for (const method of impl.methods) {
-      const reason = impl.conditional || method.conditional ? 'conditional-cfg' : impl.generic ? 'generic-dispatch' : null;
+      const reason = impl.conditional || method.conditional ? Reason.conditionalCfg : impl.generic ? Reason.genericDispatch : null;
       addBinding(entity.type.methods, method.name, {reason, target: method.target});
     }
   }
@@ -434,8 +473,9 @@ function indexRust(files, probe) {
 }
 
 export function rustCalls(files, probe) {
-  return indexRust(files, probe).map(call => ({
-    ...call,
-    resolution: call.conditional ? unresolved('conditional-cfg') : resolveCallee(call.file, call.current, call.callee, call.definitions),
-  }));
+  return indexRust(files, probe).map(call => {
+    const resolution = call.resolution ?? (call.conditional ? unresolved(Reason.conditionalCfg)
+      : resolveCallee(call.file, call.current, call.callee, call.definitions));
+    return {...call, resolution, writtenPath: resolution.reason ? writtenPath(call.file, call.callee) : null};
+  });
 }

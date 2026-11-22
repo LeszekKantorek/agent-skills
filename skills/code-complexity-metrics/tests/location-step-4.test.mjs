@@ -67,6 +67,23 @@ test('Markdown preserves empty, whitespace, literal entities, and backslashes ne
     assert.equal(mdCells(line)[0], name.replaceAll('\\', '\\\\'));
   }
 });
+test('Markdown leaves underscores inside function names legible in raw output', () => {
+  for (const [name, encoded] of [
+    ['poll_shutdown', 'poll_shutdown'],
+    ['foo__bar', 'foo__bar'],
+    ['próba_żółć', 'próba_żółć'],
+    ['_poll_shutdown_', '\\_poll_shutdown\\_'],
+    ['__private__', '\\_\\_private\\_\\_'],
+  ]) {
+    const aggregate = fixture(name);
+    const {report, selected} = makeReport(aggregate);
+    const table = markdown(report, selected, aggregate);
+    const explain = markdown(report, selected, aggregate, true);
+    assert.ok(table.includes('| ' + encoded + ' |'));
+    assert.ok(explain.includes('## ' + encoded + ' — '));
+    assert.ok(explain.includes('(' + encoded + ')'));
+  }
+});
 test('explain heading uses one raw delimiter even when either field contains it', () => {
   const aggregate = fixture('name — part & #8212;');
   const original = aggregate.functions[0];
@@ -85,11 +102,9 @@ test('diagnostic paths cannot begin a nested Markdown block', () => {
     const aggregate = fixture();
     aggregate.diagnostics = [{ owner: null, fileId, code: 'E', message: 'problem', category: 'parse' }];
     const result = makeReport(aggregate);
-    for (const explain of [false, true]) {
-      const line = markdown(result.report, result.selected, aggregate, explain).split('\n').find(line => line.startsWith('- '));
-      assert.equal(mdCells(`| ${line.slice(2)} |`)[0], `${result.report.diagnostics[0].location}: E: problem`);
-      assert.doesNotMatch(line, /^- (?:[-+*] |\d+[.)] )/);
-    }
+    const line = markdown(result.report, result.selected, aggregate, true).split('\n').find(line => line.startsWith('- '));
+    assert.equal(mdCells(`| ${line.slice(2)} |`)[0], `${result.report.diagnostics[0].location}: E: problem`);
+    assert.doesNotMatch(line, /^- (?:[-+*] |\d+[.)] )/);
   }
 });
 test('diagnostics sort by normalized path, error, name and retain duplicates', () => {
@@ -123,7 +138,7 @@ test('ownerless file diagnostics normalize their path exactly once', () => {
   input.sources.set(fileId, {source: '😺\r\n\t1'});
   const {report, selected} = makeReport(input, 'missing');
   assert.deepEqual(report.diagnostics, [{error: 'E: bad', name: null, location: String.raw`file\t\\literal\n.js:0:0:6`}]);
-  assert.match(markdown(report, selected, input), /file\\\\t/);
+  assert.match(markdown(report, selected, input, true), /file\\\\t/);
   assert.equal(diagnosticText(report), `${report.diagnostics[0].location}: E: bad`);
 });
 

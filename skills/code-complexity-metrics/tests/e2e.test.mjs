@@ -10,7 +10,7 @@ import {inputFiles} from '../scripts/input-files.mjs';
 const root=fileURLToPath(new URL('../../../',import.meta.url));
 const script=fileURLToPath(new URL('../scripts/measure.mjs',import.meta.url));
 const clone=path.join(root,'.local','msfs2024-artificial-horizon');
-const run=(...args)=>spawnSync(process.execPath,[script,...args],{cwd:root,encoding:'utf8'});
+const run=(...args)=>spawnSync(process.execPath,[script,...args],{cwd:root,encoding:'utf8',maxBuffer:8*1024*1024});
 const hash=async file=>createHash('sha256').update(await readFile(file)).digest('hex');
 test('pinned clone: deterministic output, manual examples, output file and unchanged sources',async t=>{
  const rev=spawnSync('git',['-C',clone,'rev-parse','HEAD'],{encoding:'utf8'});
@@ -30,15 +30,25 @@ test('pinned clone: deterministic output, manual examples, output file and uncha
  const clamp=report.functions.find(f=>f.name==='clamp');
  assert.deepEqual(clamp.halstead_counts,{n1:5,n2:7,eta1:3,eta2:4});
  assert.equal(clamp.metrics.halstead_volume,12*Math.log2(7));
- // The local setAttributes call resolves. The DOM method remains unresolved.
+ // The local definition and the written DOM member both contribute to Fan-Out.
  const svg=report.functions.find(f=>f.name==='svgElement');
  const setAttributes=report.functions.find(f=>f.name==='setAttributes');
- assert.equal(svg.metrics.fan_out,1);
- assert.equal(svg.call_graph.fan_out.complete,false);
- assert.equal(svg.call_graph.fan_out.unresolved_calls,1);
+ assert.equal(svg.metrics.fan_in,24);
+ assert.equal(svg.call_graph.fan_in.callers_count,24);
+ assert.equal(svg.call_graph.fan_in.callers.length,24);
+ assert.equal(svg.metrics.fan_out,2);
+ assert.equal(svg.metrics.instability,2/26);
+ assert.deepEqual(svg.call_graph.fan_out,{
+  unresolved_count: 1,
+  unresolved_calls: [{
+   location: svg.location.replace(/:\d+:\d+:\d+$/u, ':6:19'),
+   call: 'document.createElementNS',
+   reasons: ['dynamic-member'],
+  }],
+ });
  // Callers in the rest of the checkout count even though only three files appear in the report.
  assert.equal(setAttributes.metrics.fan_in,22);
- assert.equal(report.summary.call_graph.scope,'project_files');
+ assert.equal('call_graph' in report.summary,false);
  const temp=await mkdtemp(path.join(os.tmpdir(),'metrics-e2e-'));
  try {
   const dest=path.join(temp,'report.json');const result=run(...args,'--format','json','--output',dest);

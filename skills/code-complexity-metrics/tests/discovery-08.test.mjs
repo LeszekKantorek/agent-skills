@@ -26,7 +26,11 @@ test('E08 module macro discovery and independent outer survive every format and 
    if(format==='json') {
     const j=JSON.parse(r.stdout);assert.equal(j.summary.function_discovery_complete,false);
     assert.equal(j.functions.length,args.length?0:1);assert.deepEqual(j.diagnostics,[d]);
-   } else assert.ok((format==='csv'?r.stderr:r.stdout).includes('rust-unsupported-macro-arguments'),`${format} diagnostic`);
+   } else {
+    assert.match(r.stderr,/rust-unsupported-macro-arguments/);
+    if(format==='explain') assert.match(r.stdout,/## Diagnostics[\s\S]*rust-unsupported-macro-arguments/);
+    else assert.match(r.stdout,/Function discovery: incomplete · Analysis errors/);
+   }
   }
  } finally {await rm(dir,{recursive:true,force:true})}
 });

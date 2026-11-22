@@ -8,10 +8,6 @@ import os from 'node:os';
 import {fileURLToPath} from 'node:url';
 const script=fileURLToPath(new URL('../scripts/measure.mjs',import.meta.url));
 const run=(cwd,...args)=>spawnSync(process.execPath,[script,...args],{cwd,encoding:'utf8'});
-function localSummary({call_graph, ...summary}) {
- assert.equal(call_graph.scope,'project_files');
- return summary;
-}
 test('CLI preserves broken files and filters outer after analysis',async()=>{
  const dir=await mkdtemp(path.join(os.tmpdir(),'metrics-'));
  try {
@@ -20,7 +16,7 @@ test('CLI preserves broken files and filters outer after analysis',async()=>{
   await writeFile(path.join(dir,'other.xyz'),'x');
   const r=run(dir,'--path','good.js','--path','bad.rs','--path','other.xyz','--filter','one');
   assert.equal(r.status,1); const report=JSON.parse(r.stdout);
-  assert.deepEqual(localSummary(report.summary),{files:3,functions_found:3,functions_presented:1,function_discovery_complete:false,has_errors:true});
+  assert.deepEqual(report.summary,{files:3,functions_found:3,functions_presented:1,function_discovery_complete:false,has_errors:true});
   assert.deepEqual(Object.keys(report.functions[0]),['name','location','metrics','halstead_counts','call_graph','error']);
   assert.equal(report.functions[0].location,'good.js:1:1:30');
   assert.equal(report.functions[0].metrics.cognitive_complexity,1);
@@ -46,8 +42,8 @@ test('CSV format writes filtered metrics and explain still produces Markdown',as
   const r=run(dir,'--path','a,b.js','--format','csv','--filter','proc','--output','report.csv');
   assert.equal(r.status,0);assert.equal(r.stdout,'');
   const csv=await readFile(path.join(dir,'report.csv'),'utf8');
-  assert.match(csv,/^# Code Complexity Metrics\n# Files: 1; functions found: 2; functions presented: 1; function discovery complete: true; has errors: false; call graph scope: project_files; call graph complete: false; unresolved calls: 1\n/);
-  assert.match(csv,/Name,Location,Cognitive,Halstead Volume,N1,N2,Eta1,Eta2,Fan-In,Fan-Out,Instability,Fan-In complete,Fan-Out complete,Unresolved in,Unresolved out,Error\nprocess,"a,b\.js:1:1:27",0,2,1,1,1,1,0,0,null,(?:true|false),false,\d+,1,\n$/);
+  assert.match(csv,/^# Code Complexity Metrics\n# Files: 1 · Functions: 1 of 2\n/);
+  assert.match(csv,/Name,Location,Cognitive,Halstead Volume,Fan-In,Fan-Out,Instability,Error\nprocess,"a,b\.js:1:1:27",0,2\.00,0,1,1\.00,None\n$/);
   const explained=run(dir,'--path','a,b.js','--format','csv','--explain');
   assert.equal(explained.status,0);assert.match(explained.stdout,/Files: 1; functions found: 2; functions presented: 2;/);assert.match(explained.stdout,/```javascript/);
  } finally {await rm(dir,{recursive:true,force:true})}
@@ -114,18 +110,25 @@ test('filter selects name prefixes and presents only their files in JSON and Mar
   const report=JSON.parse(json.stdout);
   assert.deepEqual(report.functions.map(f=>f.name),['process','processExtra','save']);
   assert.deepEqual([...new Set(report.functions.map(f=>f.location.split(':').slice(0,-3).join(':')))],['a.js','b.js']);
-  assert.deepEqual(localSummary(report.summary),{files:3,functions_found:5,functions_presented:3,function_discovery_complete:true,has_errors:false});
+  assert.deepEqual(report.summary,{files:3,functions_found:5,functions_presented:3,function_discovery_complete:true,has_errors:false});
   for(const mode of [['--format','markdown'],['--explain']]) {
    const md=run(dir,...args,...mode); assert.equal(md.status,0);
    assert.match(md.stdout,/a\.js/); assert.match(md.stdout,/b\.js/); assert.doesNotMatch(md.stdout,/c\.js/);
   }
   const none=JSON.parse(run(dir,'--path','*.js','--filter','missing').stdout);
   assert.equal('analyzed_files' in none,false); assert.deepEqual(none.functions,[]);
-  assert.deepEqual(localSummary(none.summary),{files:3,functions_found:5,functions_presented:0,function_discovery_complete:true,has_errors:false});
+  assert.deepEqual(none.summary,{files:3,functions_found:5,functions_presented:0,function_discovery_complete:true,has_errors:false});
  } finally {await rm(dir,{recursive:true,force:true})}
 });
 test('empty input and malformed arguments use expected exit codes',()=>{
- const empty=run(os.tmpdir());assert.equal(empty.status,0);assert.deepEqual(localSummary(JSON.parse(empty.stdout).summary),{files:0,functions_found:0,functions_presented:0,function_discovery_complete:true,has_errors:false});
+ const empty=run(os.tmpdir());assert.equal(empty.status,0);assert.deepEqual(JSON.parse(empty.stdout).summary,{files:0,functions_found:0,functions_presented:0,function_discovery_complete:true,has_errors:false});
+ const csv=run(os.tmpdir(),'--format','csv');
+ assert.equal(csv.status,0,csv.stderr);
+ assert.deepEqual(csv.stdout.split('\n').slice(1),['# Files: 0 · Functions: 0','# Version: 20261122.0.0','Name,Location,Cognitive,Halstead Volume,Fan-In,Fan-Out,Instability,Error','']);
+ const md=run(os.tmpdir(),'--format','markdown');
+ assert.equal(md.status,0,md.stderr);
+ assert.match(md.stdout,/^Files: 0 · Functions: 0$/m);
+ assert.match(md.stdout,/^\| Name \| Location \| Cognitive \| Halstead Volume \| Fan-In \| Fan-Out \| Instability \| Error \|$/m);
  assert.equal(run(os.tmpdir(),'--path').status,1);assert.equal(run(os.tmpdir(),'--format','xml').status,1);
 });
 test('missing literal file aborts publication alongside valid files',async()=>{
@@ -142,7 +145,7 @@ test('UC-14 public CLI compares equivalent Rust and JS with manual expectations'
   await writeFile(path.join(dir,'a.js'),'function f(){if(a){const g=()=>{if(b){if(c){work();}}};}}');
   await writeFile(path.join(dir,'b.rs'),'fn f(){if a {let g=||{if b {if c {work();}}};}}');
   const r=run(dir,'--path','*.js','--path','*.rs','--format','json');assert.equal(r.status,0);
-  const report=JSON.parse(r.stdout); assert.deepEqual(localSummary(report.summary),{files:2,functions_found:2,functions_presented:2,function_discovery_complete:true,has_errors:false});
+  const report=JSON.parse(r.stdout); assert.deepEqual(report.summary,{files:2,functions_found:2,functions_presented:2,function_discovery_complete:true,has_errors:false});
   for(const item of report.functions) assert.equal(item.metrics.cognitive_complexity,8);
  } finally {await rm(dir,{recursive:true,force:true})}
 });
@@ -153,8 +156,8 @@ test('UC-15 assigns logical operators to their lines and sums increments',async(
   const r=run(dir,'--path','a.js','--explain','--format','json');assert.equal(r.status,0);
   const rows=r.stdout.split('\n').map(explainRow).filter(Boolean);
   assert.deepEqual(rows.slice(1,3), [
-   {fragment:' return a &&',cognitive:1,halstead:[2,1,2,1],error:undefined},
-   {fragment:' b ||',cognitive:1,halstead:[1,1,1,1],error:undefined},
+   {fragment:' return a &&',cognitive:1,halstead:[2,1,2,1],fanOut:0,error:undefined},
+   {fragment:' b ||',cognitive:1,halstead:[1,1,1,1],fanOut:0,error:undefined},
   ]);
   assert.match(r.stdout,/Cognitive: 2/);
  } finally {await rm(dir,{recursive:true,force:true})}
@@ -166,12 +169,12 @@ test('UC-09/16 JSON and Markdown present the same selected names and totals',asy
   const json=run(dir,'--path','a.js','--filter','process|save','--format','json');
   const md=run(dir,'--path','a.js','--filter','process|save','--format','markdown');
   assert.equal(json.status,0);assert.equal(md.status,0);const report=JSON.parse(json.stdout);
-  assert.deepEqual(localSummary(report.summary),{files:1,functions_found:3,functions_presented:2,function_discovery_complete:true,has_errors:false});
+  assert.deepEqual(report.summary,{files:1,functions_found:3,functions_presented:2,function_discovery_complete:true,has_errors:false});
   assert.deepEqual(report.functions.map(f=>f.name),['process','save']);
-  assert.match(md.stdout,/functions found: 3; functions presented: 2/);
-  assert.match(md.stdout,/\| Name \| Location \| Cognitive \| Halstead Volume \| N1 \| N2 \| Eta1 \| Eta2 \| Fan-In \| Fan-Out \| Instability \| Fan-In complete \| Fan-Out complete \| Unresolved in \| Unresolved out \| Error \|/);
-  assert.match(md.stdout,/\| process \| a\.js:1:1:27 \| 0 \| 2\.00 \| 1 \| 1 \| 1 \| 1 \| 0 \| 1 \| 1\.00 \| true \| true \| 0 \| 0 \| {2}\|$/m);
-  assert.match(md.stdout,/\| save \| a\.js:[^|]+\| 0 \| 0\.00 \| 0 \| 0 \| 0 \| 0 \| 1 \| 0 \| 0\.00 \| true \| true \| 0 \| 0 \| {2}\|$/m);
+  assert.match(md.stdout,/^Files: 1 · Functions: 2 of 3$/m);
+  assert.match(md.stdout,/^\| Name \| Location \| Cognitive \| Halstead Volume \| Fan-In \| Fan-Out \| Instability \| Error \|$/m);
+  assert.match(md.stdout,/^\| process \| a\.js:1:1:27 \| 0 \| 2\.00 \| 0 \| 1 \| 1\.00 \| None \|$/m);
+  assert.match(md.stdout,/^\| save \| a\.js:[^|]+\| 0 \| 0\.00 \| 1 \| 0 \| 0\.00 \| None \|$/m);
   assert.doesNotMatch(md.stdout,/Analyzed files:/);
   const none=run(dir,'--path','a.js','--filter','null');assert.equal(JSON.parse(none.stdout).summary.functions_presented,0);
  } finally {await rm(dir,{recursive:true,force:true})}

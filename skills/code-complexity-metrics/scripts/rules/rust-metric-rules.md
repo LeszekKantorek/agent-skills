@@ -1,6 +1,6 @@
 # Rust metric rules
 
-Rules version: **2.2**.
+Rules version: **2.5**.
 
 The [generic metric rules](generic-metric-rules.md) define Cognitive scoring and function ownership. Apply the [recursive composition rules](generic-metric-rules.md#recursive-composition) at every nesting level.
 
@@ -81,4 +81,6 @@ Both operations in `obj.run()` contribute, because the expression accesses a fie
 
 Use the [shared call graph rules](generic-metric-rules.md#call-graph). The analyzer indexes statically bound functions and closures, inline modules, and file modules reached from conventional crate roots in the analyzed projects. It recognizes `crate::`, `self::`, `super::`, explicit imports, and aliases. Explicit qualified paths can resolve to inherent methods when the declaration is unique.
 
-Trait dispatch, type-dependent calls, and ambiguous imports remain unresolved. A macro invocation adds no edge of its own. Recognized calls inside recovered macro arguments keep their original source locations.
+Trait dispatch, type-dependent calls, and ambiguous imports remain unresolved. Count each distinct written macro path once per outer for Fan-Out. For example, two invocations of `transport::send!` and one invocation of `assert!` contribute two points. The count uses the written path, including an alias when the invocation uses one.
+
+Recognized function calls in written macro arguments keep their source locations and contribute separately. A diagnostic about unsupported arguments leaves an intact macro path available for Fan-Out.

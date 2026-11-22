@@ -19,7 +19,7 @@ test('clean copy runs twice with network calls blocked and no installation',asyn
   const metrics=JSON.parse(first.stdout).functions[0].metrics;
   assert.equal(metrics.cognitive_complexity,1);
   assert.equal(metrics.halstead_volume,8);
-  assert.equal(metrics.fan_out,0);
+  assert.equal(metrics.fan_out,1);
   await rm(path.join(dir,'skill','vendor','tree-sitter','tree-sitter-rust.wasm'));
   const missing=spawnSync(process.execPath,args,{cwd:dir,encoding:'utf8'});
   assert.equal(missing.status,1);
