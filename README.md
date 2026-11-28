@@ -1,15 +1,12 @@
 # agent-skills
 
-Version: 1.1.0
+Version: 2.0.0
 
-Skills for AI agents to create reusable procedures and write clear technical documentation. They help agents define actions, preserve meaning, and check results.
+Skills for AI agents to create concise, reusable procedures with clear decisions and verifiable results.
 
 ## Skills
 
-| Skill | Purpose |
-| --- | --- |
-| [procedural-skill-creator](skills/procedural-skill-creator/SKILL.md) | Create or revise skills with clear actions, decisions, and completion checks. |
-| [technical-writing-rules](skills/technical-writing-rules/SKILL.md) | Write, revise, or review English technical documentation while preserving facts and meaning. |
+- [procedural-skill-creator](skills/procedural-skill-creator/SKILL.md) — Create or revise executable agent skills with only the guidance needed for correct execution.
 
 ## Install the plugin from GitHub
 

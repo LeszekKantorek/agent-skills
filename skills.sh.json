@@ -3,11 +3,10 @@
   "notGrouped": "bottom",
   "groupings": [
     {
-      "title": "Skills and writing",
-      "description": "Create reusable agent procedures and write or review technical documentation.",
+      "title": "Skill creation",
+      "description": "Create and revise executable agent procedures.",
       "skills": [
-        "procedural-skill-creator",
-        "technical-writing-rules"
+        "procedural-skill-creator"
       ]
     }
   ]
