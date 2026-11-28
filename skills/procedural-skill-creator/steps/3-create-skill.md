@@ -8,10 +8,59 @@ Create a skill that expresses the established capability and designed procedure.
 
 Use [working-example.md](../references/working-example.md) and its relevant linked steps as a reference for expressing instructions and organizing delegated procedures, not as a prescribed structure or set of tasks.
 
-Create or update `SKILL.md` in English with the name, selection description, and procedure derived from the capability. Express the relevant selection boundaries in the description. State the intended outcome of the complete procedure.
+### Determine the necessary guidance
 
-For orchestrated skills, use `SKILL.md` to guide the lead agent. Describe the delegated steps, their responsibilities, expected results, dependencies, and conditions for execution. Place their execution instructions in `steps/<number>-<step>.md` files focused on the goal and procedure.
+Consider what the executing agent needs to perform the designed actions:
 
-Place supporting resources where the agent can access them. Identify when each resource is needed and avoid requiring unrelated reading.
+- **Knowledge and interpretation:** What domain or project information is needed? Which distinctions or evidence limits affect interpretation?
+- **Decisions:** Which choices require explicit criteria and consequences? Where could different interpretations produce materially different behavior?
+- **Actions:** Which operations, conditions, exceptions, or prerequisites need to be stated for execution to proceed correctly?
+- **Examples:** Would a concrete example distinguish plausible interpretations better than another instruction?
+- **Tools:** Could an existing tool or reusable script perform a deterministic or repeated operation?
+- **Conditional knowledge:** Which information is needed only for particular tasks or outcomes?
+
+Provide the guidance that addresses these needs. Keep examples illustrative unless their content is an established requirement.
+
+### Express the capability and procedure
+
+Create or update `SKILL.md` in English. Use YAML frontmatter with `name` and `description`. The description identifies the capability, intended requests, and consequential exclusions. State the intended outcome of the complete procedure.
+
+Choose the structure that implements the execution approach established during design.
+
+**Direct execution**
+
+Keep the procedure in `SKILL.md`.
+
+```text
+skill-name/
+└── SKILL.md
+```
+
+**Orchestrated execution**
+
+Use `SKILL.md` to guide the lead agent. Link the delegated steps and describe their responsibilities, expected results, dependencies, and conditions for execution. Place their instructions in `steps/<number>-<step>.md` files focused on the goal and procedure.
+
+```text
+skill-name/
+├── SKILL.md
+└── steps/
+    ├── 1-collect.md
+    └── 2-compare.md
+```
+
+### Organize supporting resources
+
+Include resources according to the work. For example, a skill may use:
+
+```text
+skill-name/
+├── SKILL.md
+├── steps/       # Delegated procedures
+├── references/  # Supporting knowledge
+├── scripts/     # Reusable executable operations
+└── assets/      # Templates and other resources used in execution
+```
+
+Link supporting resources from the instructions that need them. Identify when to consult a resource rather than require unrelated reading.
 
 Save the skill and its required resources in the requested location. Provide the created or updated skill to the lead agent for verification.

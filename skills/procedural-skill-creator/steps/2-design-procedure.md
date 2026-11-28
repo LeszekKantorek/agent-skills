@@ -6,25 +6,54 @@ Design the actions and decisions needed to achieve the established capability.
 
 ## Procedure
 
-Work backward from the outcome to determine the results, decisions, and prerequisites needed. Connect each action to the subsequent work or final outcome that needs its result.
+Work backward from the intended outcome to identify the results needed to achieve it. Define each action by the result it must establish, rather than the activity it performs.
 
-Define each action by the result it must establish, rather than the activity it performs.
+### Examine proposed steps
 
-For decisions that affect execution, establish the criteria, alternatives, consequences, and next action. Handle incomplete evidence without assuming a successful result. Preserve uncertainty until it can be resolved or reported.
+Consider questions such as:
 
-Arrange actions according to their dependencies and execution conditions:
+- What does this step establish: a finding, decision, transformation, or completed result?
+- What information or preceding results does it depend on?
+- Which operation or decision produces the result? Which criteria distinguish the alternatives and their consequences?
+- What subsequent action or final outcome needs its result?
+- What alternative results are possible, including partial findings or missing information?
+- What happens when an assumption fails or evidence is incomplete?
+- How is completion recognized?
+- Would a separate agent improve this step's execution or assessment?
 
-- **Sequential:** complete prerequisite actions before work that depends on their results.
-- **Parallel:** run independent actions concurrently when useful, avoiding conflicting changes. Combine their required results before dependent work.
-- **Conditional:** perform an action only when its condition is established; account for alternative results and unresolved conditions.
+### Arrange the procedure
 
-Identify what the agent can do using its existing capabilities and what requires additional instructions, resources, or tools.
+Connect actions according to their dependencies and execution conditions:
 
-Choose the execution approach according to the work:
+- **Sequential:** establish prerequisite results before dependent actions.
+- **Parallel:** run independent actions concurrently when useful and avoid conflicting changes. Combine their required results before dependent work.
+- **Conditional:** select actions according to established conditions and handle alternative or unresolved results explicitly.
 
-- **Direct execution:** use a single agent for a self-contained procedure.
-- **Orchestrated execution:** separate work into delegated steps when distinct contexts, responsibilities, or independent assessment are useful. Define what each step must establish and how its result supports subsequent work.
+For example, independent investigations can converge into a decision with more than one supported outcome:
 
-Distinguish how the work is performed from the structure of its deliverable. Define the checks needed to establish completion.
+```text
+Reported discrepancy
+    ├── Read expected behavior ──┐
+    └── Inspect observations ────┤
+                                 ↓
+                          Compare findings
+                                 ├── Cause supported → Correct → Recheck
+                                 └── Cause uncertain → Investigate or report gap
+```
 
-Provide the procedure design and unresolved design choices to the lead agent.
+Consider the complete flow:
+
+- Which actions repeat work or produce results that nothing needs? Remove them or combine actions that do not need separate responsibilities.
+- Which decisions should precede expensive or irreversible work?
+- When a result needs correction, which dependent actions must be repeated?
+- What can the executing agent do with its existing capabilities, and what requires additional guidance, resources, or tools?
+
+Keep uncertainty visible until it can be resolved or reported. Distinguish the operations that produce a deliverable from the structure of the deliverable itself.
+
+### Choose the execution approach
+
+**Direct execution.** Use a single agent when the procedure is self-contained and its actions benefit from a shared context.
+
+**Orchestrated execution.** Delegate steps when distinct responsibilities, context requirements, or independent assessment justify separate agents. Establish each step's contribution to subsequent work. Consider whether delegation reduces context complexity enough to justify coordination and whether the execution environment supports it.
+
+Define the checks needed to establish completion. Provide the procedure design and unresolved design choices to the lead agent.
