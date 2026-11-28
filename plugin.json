@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "agent-skills",
-  "version": "1.1.0",
-  "description": "Create reusable agent skills and write clear technical documentation while preserving facts and meaning.",
+  "version": "2.0.0",
+  "description": "Create concise, reusable agent skills as executable procedures.",
   "author": {
     "name": "Leszek Kantorek",
     "url": "https://github.com/LeszekKantorek"
@@ -13,15 +13,14 @@
   "keywords": [
     "agent-skills",
     "skill-creation",
-    "technical-writing",
-    "documentation"
+    "procedures"
   ],
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Agent Skills",
-        "shortDescription": "Create agent skills and write clear technical documentation.",
-        "longDescription": "Create or revise reusable skills with clear actions, decisions, and completion checks. Write, revise, or review English technical documentation while preserving facts and meaning.",
+        "shortDescription": "Create concise, executable agent skills.",
+        "longDescription": "Create or revise reusable skills with connected actions, clear decisions, and verifiable results. Keep instructions as short as their required behavior permits.",
         "developerName": "Leszek Kantorek",
         "category": "Productivity",
         "websiteURL": "https://github.com/LeszekKantorek/agent-skills"
