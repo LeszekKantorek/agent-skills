@@ -166,10 +166,6 @@ Use a horizontal rule when a distinct part of the document needs separation beyo
 
 ---
 
-Use a footnote for supplementary context that does not affect execution.[^context] Keep required conditions in the main text.
-
-[^context]: Footnotes and other extensions depend on the Markdown renderer.
-
 ### Renderer-specific forms
 
 Use extended forms only when the intended renderer supports them.
