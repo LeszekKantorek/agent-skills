@@ -6,11 +6,17 @@ Design the actions and decisions needed to achieve the established capability.
 
 ## Procedure
 
-Work backward from the outcome to determine which results, decisions, and prerequisites are needed. Arrange actions in dependency order, with each result supporting a later action or the final outcome.
+Work backward from the outcome to determine the results, decisions, and prerequisites needed. Connect each action to the subsequent work or final outcome that needs its result.
 
 Define each action by the result it must establish, rather than the activity it performs.
 
 For decisions that affect execution, establish the criteria, alternatives, consequences, and next action. Handle incomplete evidence without assuming a successful result. Preserve uncertainty until it can be resolved or reported.
+
+Arrange actions according to their dependencies and execution conditions:
+
+- **Sequential:** complete prerequisite actions before work that depends on their results.
+- **Parallel:** run independent actions concurrently when useful, avoiding conflicting changes. Combine their required results before dependent work.
+- **Conditional:** perform an action only when its condition is established; account for alternative results and unresolved conditions.
 
 Identify what the agent can do using its existing capabilities and what requires additional instructions, resources, or tools.
 

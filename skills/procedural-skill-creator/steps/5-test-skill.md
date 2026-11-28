@@ -10,10 +10,13 @@ Derive realistic test requests and expected results from the established capabil
 
 - **Selection:** matching and closely related nonmatching requests.
 - **Execution:** representative tasks and consequential exceptions or incomplete inputs.
+- **Orchestration:** dependency order, independent actions, and alternative paths when applicable.
 
-Run the tests in fresh agent contexts when available. Use the skill without supplying additional instructions that compensate for its deficiencies. Ask the lead agent to arrange independent test runs when necessary.
+Run the tests in fresh agent contexts when available. Ask the lead agent to arrange independent test runs when necessary.
 
-Compare the observed results with the expected behavior. Examine the execution when needed to identify the cause of failures or unnecessary work. For orchestrated skills, check whether delegation and the exchange of relevant information actually support completion.
+For selection tests, make the skill available without explicitly invoking it. For execution tests, use the skill without supplying instructions that compensate for its deficiencies.
+
+Compare the observed results with the expected behavior. Examine the execution when needed to identify the cause of failures or unnecessary work. For orchestrated skills, examine whether the lead agent respects dependencies, intended parallelism, and conditions, and whether each delegate receives the relevant information.
 
 When evaluating an improvement, compare against the previous skill under equivalent conditions. For a new skill, compare against execution without the skill when useful. Consider result quality, time, and token usage where measurable.
 

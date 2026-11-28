@@ -17,10 +17,10 @@ As the lead agent, coordinate the steps below. Delegate each step to a separate 
 
 | Step | Responsibility and expected result |
 | --- | --- |
-| [1. Establish the capability](steps/1-establish-capability.md) | Investigate the request and relevant sources. Establish the capability, boundaries, requirements, and unresolved choices. |
-| [2. Design the procedure](steps/2-design-procedure.md) | Determine the actions, decisions, dependencies, and execution responsibilities needed to achieve the capability. |
+| [1. Establish the capability](steps/1-establish-capability.md) | Investigate the request and relevant sources. Establish the capability, selection boundaries, requirements, and unresolved choices. |
+| [2. Design the procedure](steps/2-design-procedure.md) | Determine the actions, decisions, dependencies, execution order, and responsibilities needed to achieve the capability. |
 | [3. Create or update the skill](steps/3-create-skill.md) | Implement the designed procedure as a skill with its necessary resources. |
-| [4. Verify the skill](steps/4-verify-skill.md) | Independently review the instructions, dependencies, and resources against the capability and design. Identify defects and unresolved problems. |
+| [4. Verify the skill](steps/4-verify-skill.md) | Independently review the instructions, dependencies, and resources against the capability and design. Identify defects, their affected steps, and unresolved problems. |
 | [5. Test the skill](steps/5-test-skill.md) | Execute representative tasks. Establish whether skill selection, execution, and results meet expectations. |
 
 Use each result to guide the next applicable step. For scoped revisions, retain established behavior and execute the affected steps, including verification and testing.
