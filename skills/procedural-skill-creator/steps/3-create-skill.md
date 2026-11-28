@@ -6,7 +6,7 @@ Create a skill that expresses the established capability and designed procedure.
 
 ## Procedure
 
-Use [working-example.md](../references/working-example.md) as a reference for expressing instructions in Markdown, not as a prescribed structure or set of tasks.
+Use [working-example.md](../references/working-example.md) and its relevant linked steps as a reference for expressing instructions and organizing delegated procedures, not as a prescribed structure or set of tasks.
 
 Create or update `SKILL.md` in English with the name, selection description, and procedure derived from the capability. State the intended outcome of the complete procedure.
 
