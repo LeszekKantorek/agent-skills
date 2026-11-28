@@ -2,20 +2,18 @@
 
 ## Goal
 
-Independently establish whether the skill achieves its intended outcome and follows the designed procedure.
+Independently establish whether the skill's instructions and resources are consistent with its intended outcome and designed procedure.
 
 ## Procedure
 
 Review the skill against the established capability and procedure:
 
-- [ ] Matching requests select the skill; unrelated requests remain distinguishable.
+- [ ] The name and description identify matching requests and distinguish unrelated requests.
 - [ ] Each action has the necessary inputs, and its possible results lead to a valid next action or completion.
 - [ ] Required decisions, constraints, exceptions, and unresolved cases remain covered.
 - [ ] The skill contains only guidance needed to execute the procedure.
 - [ ] Metadata, resources, and required helpers are usable.
 
-For orchestrated skills, check that the lead agent can coordinate the steps and each subagent can establish its expected result using the relevant information.
+For orchestrated skills, check that responsibilities, dependencies, and expected results are sufficient to coordinate the steps.
 
-When execution is available, test selection with matching and nonmatching requests. Run representative tasks, including a consequential exception, and compare results with expected behavior.
-
-Report completed checks, findings and the affected steps, unresolved problems, and untested behavior to the lead agent. Distinguish inspection from observed execution.
+Report completed checks, findings and the affected steps, and unresolved problems to the lead agent. Identify any questions that require actual execution to resolve.
