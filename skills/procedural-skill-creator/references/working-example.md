@@ -1,24 +1,23 @@
-# Writing instructions in Markdown
-
-This working example demonstrates how to organize an orchestrated procedure and express its instructions. Its content and linked steps are authoring references, not tasks to execute or mandatory sections of another skill.
+# Working example — Instruction forms
 
 ## Goal
 
-Express a procedure so its actions, decisions, dependencies, and expected results are clear without unnecessary instructions.
+Demonstrate how Markdown expresses actions, conditions, decisions, dependencies, technical content, and verification criteria.
+
+## Scope
+
+The numbered files group related forms, not consecutive phases of work. Consult the relevant examples independently. Their technical scenarios are illustrative, not tasks to execute or requirements for another skill.
 
 ## Orchestration
 
-As the lead agent, delegate each step with its relevant context. Use the established result to guide the next step.
+A step table can connect instructions to the responsibilities and results of separate agents.
 
-| Step | Responsibility and expected result |
+**Lead-agent instruction (example):** Delegate the selected steps with the relevant material. Combine their contributions when the required results are available.
+
+| Step | Responsibility and example result |
 | --- | --- |
-| [1. Establish the content](steps/1-establish-content.md) | Identify what the instructions need to express, including their scope and consequential distinctions. |
-| [2. Organize the procedure](steps/2-organize-procedure.md) | Arrange the actions, decisions, and dependencies into a coherent procedure. |
-| [3. Express the instructions](steps/3-express-instructions.md) | Choose Markdown forms that express the procedure and its technical content. |
-| [4. Review the document](steps/4-review-document.md) | Identify missing guidance, ambiguity, redundant instructions, and structural problems. |
-
-Return to the affected step when review identifies a problem.
-
-Use a compact sequence for a self-contained procedure. Introduce delegated steps when separate responsibilities, contexts, or independent assessment are useful.
-
-See [the creator's orchestration](../SKILL.md) for another working example.
+| [1. Express actions](steps/1-express-actions.md) | Present actions and their scope as direct instructions, paragraphs, or grouped lists. |
+| [2. Express conditions and decisions](steps/2-express-conditions-and-decisions.md) | Present conditions and alternatives as statements, labeled choices, tables, or a decision tree. |
+| [3. Express sequences and dependencies](steps/3-express-sequences-and-dependencies.md) | Present execution order, independent branches, and coordination through lists and diagrams. |
+| [4. Express technical content](steps/4-express-technical-content.md) | Present exact syntax, examples, formats, and references. |
+| [5. Express verification criteria](steps/5-express-verification-criteria.md) | Present expected results, acceptance criteria, warning signs, and corrections. |
