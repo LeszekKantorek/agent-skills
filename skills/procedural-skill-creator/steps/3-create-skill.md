@@ -6,7 +6,24 @@ Create a skill that expresses the established capability and designed procedure.
 
 ## Procedure
 
-Use [working-example.md](../references/working-example.md) and its relevant linked steps as a reference for expressing instructions and organizing delegated procedures, not as a prescribed structure or set of tasks.
+### Use the working example
+
+Use [working-example.md](../references/working-example.md) to explore ways of expressing instructions and organizing delegated procedures. Its numbered topics are independent examples, not phases of authoring or a prescribed skill template.
+
+Consult the files relevant to the instructions being written:
+
+```text
+../references/
+├── working-example.md                          # Scope, orchestration table, linked steps
+└── steps/
+    ├── 1-express-actions.md                    # Direct instructions, grouped lists, scope
+    ├── 2-express-conditions-and-decisions.md   # Conditions, alternatives, tables, decision trees
+    ├── 3-express-sequences-and-dependencies.md # Ordered steps, parallel branches, coordination
+    ├── 4-express-technical-content.md          # Code, directory trees, examples, links, diagrams
+    └── 5-express-verification-criteria.md      # Acceptance criteria, checklists, red flags, corrections
+```
+
+Use the relevant examples to express the designed procedure. Adapt their form to the work rather than copying their technical scenarios.
 
 ### Determine the necessary guidance
 

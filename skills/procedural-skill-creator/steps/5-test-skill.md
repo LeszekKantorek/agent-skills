@@ -6,42 +6,72 @@ Establish through actual execution whether the skill produces the intended resul
 
 ## Procedure
 
-### Design tests
+### 1. Design test cases
 
-Derive realistic test requests and expected results from the established capability.
+Derive realistic requests and expected behavior from the established capability.
 
-- **Selection:** Which requests exercise the essential capability? Which closely related requests should not select the skill?
-- **Execution:** Which scenarios distinguish correct behavior from a plausible incorrect interpretation? Which missing inputs or consequential exceptions could expose weaknesses?
-- **Orchestration:** Which applicable cases exercise dependency order, independent actions, alternative paths, and delegation?
+- **Selection:** include matching requests and near-misses that should not select the skill.
+- **Execution:** include representative tasks, consequential exceptions, and missing information.
+- **Orchestration:** exercise applicable dependencies, parallel actions, conditional paths, and delegation.
 
-Consider whether the expected results can be established independently of the tested instructions. Could a test pass without exercising the instruction or decision it is meant to evaluate? Use observable criteria; apply qualitative judgment where results cannot be assessed objectively.
+Consider:
 
-### Execute and compare
+- Which cases distinguish correct behavior from a plausible incorrect interpretation?
+- Can the expected result be established independently of the skill's instructions?
+- Could a test pass without exercising the instruction or decision it is intended to evaluate?
 
-Run tests in fresh agent contexts when available. Ask the lead agent to arrange independent test runs when necessary.
+Use observable criteria and qualitative judgment where objective checks are insufficient.
 
-For selection tests, make the skill available without explicitly invoking it. For execution tests, use the skill without supplying additional instructions that compensate for its deficiencies.
+### 2. Configure and execute the tests
 
-When evaluating an improvement, compare against the previous skill under equivalent conditions. For a new skill, compare against execution without the skill when useful. Keep test requests, supplied information, and relevant execution conditions comparable. Consider result quality, time, and token usage where measurable.
+Choose the execution mode according to what the case examines.
 
-### Interpret observed behavior
+**Selection test.** Make the skill available without explicitly invoking it. Observe whether the agent selects it.
 
-Compare observed results with expected behavior. Examine execution records, tool actions, and intermediate results when needed to explain failures or unnecessary work.
+**Execution test.** Use the skill without adding instructions that compensate for its deficiencies.
 
-**Correct result.** Determine whether the intended behavior was exercised. Compare with a baseline when available before attributing the result to the skill.
+Choose the baseline according to the purpose:
 
-**Incorrect or partial result.** Identify which expectation was not met and the decision, interpretation, or action that may have caused it. Distinguish an appropriately reported limitation from an execution failure.
+- **Improving an existing skill:** compare against the previous version under equivalent conditions.
+- **Creating a new skill:** compare against execution without the skill when useful.
 
-**Incorrect selection.** Examine the selection description, capability boundaries, competing skills, and whether activation can be observed.
+Keep test requests, supplied information, and relevant execution conditions comparable. Run tests in fresh agent contexts when available. Ask the lead agent to arrange independent test runs when necessary.
 
-**Unnecessary work.** Identify instructions or dependencies that cause operations without contributing to the result.
+Capture actual results, skill activation where observable, and relevant execution evidence. Measure time and token usage where available.
 
-**Inconsistent results.** Examine whether variation comes from ambiguous guidance, model behavior, or execution conditions. Repeat relevant cases when needed to distinguish plausible causes.
+### 3. Assess the results
 
-**Orchestration problems.** Examine whether the lead agent respects dependencies, intended parallelism, and execution conditions, and whether each delegate receives the relevant information and establishes its expected contribution.
+Compare the observed behavior with the expected result.
 
-**Baseline differences.** Identify meaningful improvements and regressions. Distinguish observed differences from causal explanations and limitations of the comparison.
+```text
+Test evidence
+    ├── Insufficient evidence ──→ Report unverified behavior
+    ├── Meets expectation ──────→ Confirm observed behavior
+    └── Differs from expectation → Investigate the discrepancy
+```
 
-Before proposing a change, determine whether a failure is an isolated case or reveals a broader class of problems. Identify related cases that could verify a generalized correction.
+An appropriately reported limitation or unresolved condition can satisfy a test when it matches the expected behavior. If activation cannot be observed, leave selection unverified even when the task result is correct.
 
-Report observed results, failures, likely causes, and affected instructions to the lead agent. State which tests could not be performed and the limitations of the test environment. Do not substitute inspection for execution.
+For orchestrated skills, check that the lead agent respects dependencies, intended parallelism, and execution conditions, and that delegates receive relevant information and establish their expected contributions.
+
+When a baseline is available, compare result quality, time, and token usage where measurable. Identify improvements and regressions; a correct result alone does not establish that the skill contributed to it.
+
+### 4. Investigate unexpected behavior
+
+Examine execution records, tool actions, and intermediate results when needed to explain discrepancies or unnecessary work.
+
+| Observation | Examine |
+| --- | --- |
+| Incorrect selection | Description, capability boundaries, competing skills, and observable activation. |
+| Incorrect or incomplete result | Which decisions, interpretations, or actions could explain the unmet expectation. |
+| Unnecessary work | Instructions or dependencies that introduce operations without contributing to the result. |
+| Inconsistent results | Ambiguous guidance, model behavior, or differences in execution conditions. |
+| Orchestration problem | Responsibility boundaries, dependency order, and missing or excessive context. |
+
+Distinguish observed differences from possible causes. Investigate other explanations when needed; repeat relevant cases to distinguish them.
+
+### 5. Recommend changes and report
+
+Determine whether a failure is an isolated case or reveals a broader class of problems. Identify the affected instructions and related cases that could verify a generalized correction.
+
+Report observed results, meaningful baseline differences, failures, likely causes, and proposed corrections to the lead agent. Identify tests that could not be performed and the limitations of the environment. Do not substitute inspection for execution.
