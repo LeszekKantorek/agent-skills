@@ -17,9 +17,9 @@ Identify the intended outcome, conditions of use, inputs, prerequisites, and bou
 
 Locate and inspect relevant sources:
 
-- Project instructions, documentation, existing procedures, and related skills.
-- Supplied examples, previous work, and evidence of actual execution.
-- Scripts, tools, and platform contracts that the procedure depends on.
+- **Project context:** instructions, documentation, existing procedures, and related skills.
+- **Prior work:** supplied examples, previous work, and evidence of actual execution.
+- **Execution dependencies:** scripts, tools, and platform contracts that the procedure depends on.
 
 Distinguish established requirements from proposals and illustrative material. Resolve conflicting guidance against its authority, scope, and applicability. Ask when missing information prevents a correct decision.
 
@@ -28,6 +28,8 @@ For a scoped revision, preserve established behavior outside the requested chang
 ## 2. Design the procedure
 
 Work backward from the outcome to determine which results, decisions, and prerequisites are needed. Arrange actions in dependency order, with each result supporting a later action or the final outcome.
+
+Define each action by the result it must establish, rather than the activity it performs.
 
 For decisions that affect execution, establish the criteria, alternatives, consequences, and next action. Handle incomplete evidence without assuming a successful result. Preserve uncertainty until it can be resolved or reported.
 
@@ -39,7 +41,7 @@ Distinguish how the work is performed from the structure of its deliverable. Def
 
 Use [working-example.md](references/working-example.md) as a reference for expressing instructions in Markdown, not as a prescribed structure or set of tasks.
 
-Create or update `SKILL.md` in English with the name, selection description, and procedure derived from the capability.
+Create or update `SKILL.md` in English with the name, selection description, and procedure derived from the capability. State the intended outcome of the complete procedure.
 
 Place supporting resources where the agent can access them. Identify when each resource is needed and avoid requiring unrelated reading.
 
@@ -47,11 +49,11 @@ Place supporting resources where the agent can access them. Identify when each r
 
 Review the skill against the established capability and procedure:
 
-- Matching requests select it; unrelated requests remain distinguishable.
-- Each action has the necessary inputs, and its possible results lead to a valid next action or completion.
-- Required decisions, constraints, exceptions, and unresolved cases remain covered.
-- The skill contains only guidance needed to execute the procedure.
-- Metadata, resources, and required helpers are usable.
+- [ ] Matching requests select the skill; unrelated requests remain distinguishable.
+- [ ] Each action has the necessary inputs, and its possible results lead to a valid next action or completion.
+- [ ] Required decisions, constraints, exceptions, and unresolved cases remain covered.
+- [ ] The skill contains only guidance needed to execute the procedure.
+- [ ] Metadata, resources, and required helpers are usable.
 
 Correct problems and save the skill and its resources in the requested location.
 
