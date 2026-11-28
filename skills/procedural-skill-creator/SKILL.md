@@ -9,54 +9,23 @@ metadata:
 
 ## Goal
 
-Create the smallest skill that reliably guides an agent from available inputs to the intended result.
+Create the smallest skill that reliably guides an agent from available information to the intended result.
 
-## 1. Establish the capability
+## Orchestration
 
-Identify the intended outcome, conditions of use, inputs, prerequisites, and boundaries from the user's request.
+As the lead agent, coordinate the steps below. Delegate each step to a separate subagent with its instructions, relevant user requirements, and the results it needs from preceding steps.
 
-Locate and inspect relevant sources:
+| Step | Responsibility and expected result |
+| --- | --- |
+| [1. Establish the capability](steps/1-establish-capability.md) | Investigate the request and relevant sources. Establish the capability, boundaries, requirements, and unresolved choices. |
+| [2. Design the procedure](steps/2-design-procedure.md) | Determine the actions, decisions, dependencies, and execution responsibilities needed to achieve the capability. |
+| [3. Create or update the skill](steps/3-create-skill.md) | Implement the designed procedure as a skill with its necessary resources. |
+| [4. Verify the skill](steps/4-verify-skill.md) | Independently assess the skill against the capability and design. Identify findings, observed behavior, and remaining limitations. |
 
-- **Project context:** instructions, documentation, existing procedures, and related skills.
-- **Prior work:** supplied examples, previous work, and evidence of actual execution.
-- **Execution dependencies:** scripts, tools, and platform contracts that the procedure depends on.
+Use each result to guide the next applicable step. For scoped revisions, retain established behavior and execute the affected steps, including verification.
 
-Distinguish established requirements from proposals and illustrative material. Resolve conflicting guidance against its authority, scope, and applicability. Ask when missing information prevents a correct decision.
+Resolve blockers with the user when necessary. Return to the affected steps when verification identifies problems and repeat the relevant checks.
 
-For a scoped revision, preserve established behavior outside the requested change.
+If subagents are unavailable, report the limitation rather than claim independent execution.
 
-## 2. Design the procedure
-
-Work backward from the outcome to determine which results, decisions, and prerequisites are needed. Arrange actions in dependency order, with each result supporting a later action or the final outcome.
-
-Define each action by the result it must establish, rather than the activity it performs.
-
-For decisions that affect execution, establish the criteria, alternatives, consequences, and next action. Handle incomplete evidence without assuming a successful result. Preserve uncertainty until it can be resolved or reported.
-
-Identify what the agent can do using its existing capabilities and what requires additional instructions, resources, or tools.
-
-Distinguish how the work is performed from the structure of its deliverable. Define the checks needed to establish completion.
-
-## 3. Create or update the skill
-
-Use [working-example.md](references/working-example.md) as a reference for expressing instructions in Markdown, not as a prescribed structure or set of tasks.
-
-Create or update `SKILL.md` in English with the name, selection description, and procedure derived from the capability. State the intended outcome of the complete procedure.
-
-Place supporting resources where the agent can access them. Identify when each resource is needed and avoid requiring unrelated reading.
-
-## 4. Verify the skill
-
-Review the skill against the established capability and procedure:
-
-- [ ] Matching requests select the skill; unrelated requests remain distinguishable.
-- [ ] Each action has the necessary inputs, and its possible results lead to a valid next action or completion.
-- [ ] Required decisions, constraints, exceptions, and unresolved cases remain covered.
-- [ ] The skill contains only guidance needed to execute the procedure.
-- [ ] Metadata, resources, and required helpers are usable.
-
-Correct problems and save the skill and its resources in the requested location.
-
-When execution is available, test selection with matching and nonmatching requests. Run representative tasks, including a consequential exception, and compare results with expected behavior. Repeat affected checks after corrections.
-
-Report completed checks, unresolved problems, and untested behavior. Distinguish inspection from observed execution.
+Report the completed skill and the verification results.
